@@ -51,6 +51,7 @@ export async function api(method, url, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));
+  if (res.status === 401) { location.replace("/login"); throw new Error("Signed out"); }
   if (!res.ok) throw new Error(json.error || res.statusText);
   return json;
 }

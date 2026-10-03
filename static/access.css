@@ -1,0 +1,6 @@
+/* ==================================================================== phone access */
+.access-url { padding: 8px 10px; margin-top: 6px; border-radius: 8px; background: var(--surface-2); user-select: all; word-break: break-all; }
+.access-code { margin-top: 6px; padding: 12px; border-radius: 12px; background: var(--surface-2); font-size: 24px; font-weight: 700; letter-spacing: .12em; text-align: center; user-select: all; }
+.access-fp { word-break: break-all; font-size: 11px; }
+.warn-line { color: var(--serious-ink); font-size: 13px; margin: 6px 0; }
+.remote [data-act="openCode"], .remote [data-act="openFolder"] { display: none; }

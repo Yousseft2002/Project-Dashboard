@@ -60,6 +60,7 @@ document.addEventListener("focusout", () => setTimeout(() => { if (pendingRender
 
 async function load({ quiet = false } = {}) {
   state.data = await api("GET", "/api/state");
+  document.body.classList.toggle("remote", !!state.data.access?.remote);
   updateScanStatus(state.data.scan);
   if (quiet && typing()) { pendingRender = true; return; }
   render();

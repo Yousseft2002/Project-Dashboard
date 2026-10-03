@@ -92,3 +92,19 @@ An AI chief of staff on the dashboard that answers "What should I work on today?
   ignored; Python changes need a server restart.
 
 Each phase stops for your "go" before the next one starts.
+
+## Phone access and security (built 2026-10-03)
+- **Off by default.** Settings > Phone access turns on an HTTPS listener on port 8766 (self-signed cert made with
+  OpenSSL). The PC's own app stays on http://127.0.0.1:8765 with no login.
+- **Login:** a 12-character access code (shown in Settings on the PC), session cookie (HttpOnly, SameSite=Strict,
+  Secure), 5 wrong codes per IP locks for 15 min. Only private-network IPs and an allowed Host header are accepted.
+- **Hardening:** CSP and security headers, same-origin checks (Origin / Sec-Fetch-Site), 20 MB body cap, static
+  file allowlist, PC-only routes (settings, sync, open folder, access), http/https-only URL fields, errors logged
+  to `data/server.log` instead of shown.
+- **Verified:** login, lockout, 401 for signed-out calls, PC-only routes blocked from the phone, bad Host and
+  cross-origin requests rejected, TLS on the LAN port.
+- **Known limits / to do later:** phone-width layout not yet checked on a real phone (planner cards and the hero may
+  need tuning); the access code is stored in plaintext in `data/access.json` so the PC can show it; the browser will
+  warn about the self-signed cert (compare the fingerprint in Settings); Windows may prompt to allow Python on
+  Private networks; HEAD requests return 501.
+- **Files:** `tracker/security.py`, `tracker/server.py`, `static/login.*`, `static/access.css`.

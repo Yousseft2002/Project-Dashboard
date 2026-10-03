@@ -1,4 +1,7 @@
-"""Local HTTP server: JSON API + static front end. Bound to 127.0.0.1 only."""
+"""HTTP server: JSON API + static front end.
+
+Two listeners share one Handler: 127.0.0.1 (the PC, no login) and, only when switched on, an HTTPS listener on the
+LAN for a phone (login code + session cookie required). See tracker/security.py."""
 from __future__ import annotations
 
 import base64
@@ -18,7 +21,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from collections import deque
 
-from . import analyzer, planner, previews, projects, scanner
+from . import analyzer, planner, previews, projects, scanner, security
 from .db import DB
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,6 +30,12 @@ DATA = ROOT / "data"
 SNAPSHOTS = DATA / "snapshots"
 
 db = DB(DATA / "tracker.db")
+_ctx = threading.local()
+
+
+def is_remote() -> bool:
+    """True while handling a request that arrived on the phone (LAN) listener."""
+    return getattr(_ctx, "remote", False)
 LOCAL_MACHINE = socket.gethostname()
 KIT_SRC = ROOT / "ytpc_kit"
 
@@ -472,7 +481,7 @@ def api_state(body, **_):
             "physical": physical_view(), "scan": scan_state,
             "meta": {"phases": analyzer.PHASES, "types": analyzer.TYPES, "statuses": projects.STATUSES,
                      "priorities": projects.PRIORITIES, "browser": bool(previews.find_browser())},
-            "machine": socket.gethostname(), "analysis": analysis_status(),
+            "machine": socket.gethostname(), "analysis": analysis_status(), "access": {"remote": is_remote()},
             "settings": settings_payload()}
 
 
@@ -501,7 +510,7 @@ def settings_payload() -> dict:
     sd = sync_dir()
     return {"model": db.get_setting("model", "sonnet"), "models": analyzer.MODELS,
             "claude_found": bool(analyzer.find_claude()), "local_machine": LOCAL_MACHINE,
-            "sync_dir": str(sd) if sd else "", "sync_ok": bool(sd and sd.is_dir()),
+            "sync_dir": "" if is_remote() else (str(sd) if sd else ""), "sync_ok": bool(sd and sd.is_dir()),
             "kit_ready": bool(sd and (sd / "ytpc-kit" / "install.py").exists())}
 
 
@@ -551,6 +560,10 @@ def api_scan(body, **_):
 
 @route("POST", r"/api/project/meta")
 def api_project_meta(body, **_):
+    for f in ("live_url", "preview_url", "github_url"):   # only web links: no file:// screenshots, no javascript: links
+        v = (body.get(f) or "").strip() if isinstance(body.get(f), str) else ""
+        if v and urlsplit(v).scheme not in ("http", "https"):
+            raise ValueError("URLs must start with http:// or https://")
     db.set_override(body["key"], body)
     if any(k in body for k in ("live_url", "preview_url")):
         preview_failed.discard(body["key"])
@@ -710,29 +723,146 @@ def api_delete_milestone(body, mid):
     return {"ok": True}
 
 
+MAX_BODY = 20_000_000
+PUBLIC_PATHS = {"/login", "/login.js", "/login.css"}
+LOCAL_ONLY = re.compile(r"^/api/(access(/|$)|sync/|project/open$|settings$)")   # touch the PC itself, never from a phone
+ROOT_FILES = {".html", ".js", ".css", ".svg", ".png", ".ico", ".webp"}
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+       "connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+LOG = DATA / "server.log"
+
+
+def log_error():
+    """Append the current traceback to data/server.log (pythonw has no console)."""
+    try:
+        DATA.mkdir(exist_ok=True)
+        if LOG.exists() and LOG.stat().st_size > 1_000_000:
+            LOG.replace(LOG.with_suffix(".old"))
+        with LOG.open("a", encoding="utf-8") as f:
+            f.write(f"--- {datetime.now().isoformat(timespec='seconds')}\n{traceback.format_exc()}\n")
+    except OSError:
+        pass
+
+
+class TrackerServer(ThreadingHTTPServer):
+    daemon_threads = True
+    remote = False      # True for the phone listener: login required, PC-only routes blocked
+    tls = False
+
+    def handle_error(self, request, client_address):   # failed TLS handshakes and dropped connections are routine
+        pass
+
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = "ProjectTracker/1"
+    server_version = "ProjectTracker"
+    sys_version = ""
+    timeout = 30        # a stalled client can't hold a thread (or a half-finished TLS handshake) open
 
     def log_message(self, fmt, *args):  # keep the console quiet
         pass
 
-    def _send(self, code: int, payload: bytes, ctype: str):
+    def _common_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", CSP)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+
+    def _send(self, code: int, payload: bytes, ctype: str, extra=()):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Cache-Control", "no-store")
+        self._common_headers()
+        for k, v in extra:
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(payload)
 
-    def _json(self, code: int, obj):
-        self._send(code, json.dumps(obj).encode("utf-8"), "application/json")
+    def _json(self, code: int, obj, extra=()):
+        self._send(code, json.dumps(obj).encode("utf-8"), "application/json", extra)
+
+    def _redirect(self, where: str):
+        self.send_response(302)
+        self.send_header("Location", where)
+        self.send_header("Content-Length", "0")
+        self._common_headers()
+        self.end_headers()
 
     def _file(self, fp: Path):
         ctype = mimetypes.guess_type(fp.name)[0] or "application/octet-stream"
+        if ctype.startswith("text/") or ctype.endswith("javascript"):
+            ctype += "; charset=utf-8"
         self._send(200, fp.read_bytes(), ctype)
 
+    def _authed(self) -> bool:
+        return (not self.server.remote) or security.valid_session(security.cookie_from(self.headers.get("Cookie")))
+
+    def _login(self, body: dict):
+        if not self.server.remote:
+            return self._json(200, {"ok": True})
+        ip = self.client_address[0]
+        wait = security.throttle_wait(ip)
+        if wait:
+            return self._json(429, {"error": f"Too many wrong codes. Try again in {max(1, wait // 60)} min."},
+                              [("Retry-After", str(wait))])
+        if not security.try_code(ip, str(body.get("code", ""))[:64]):
+            return self._json(401, {"error": "That code isn't right."})
+        token = security.new_session()
+        cookie = (f"{security.COOKIE}={token}; Path=/; Max-Age={security.SESSION_DAYS * 86400}; HttpOnly; SameSite=Strict"
+                  + ("; Secure" if self.server.tls else ""))
+        self._json(200, {"ok": True}, [("Set-Cookie", cookie)])
+
+    def _logout(self):
+        security.end_session(security.cookie_from(self.headers.get("Cookie")))
+        gone = f"{security.COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict" + ("; Secure" if self.server.tls else "")
+        self._json(200, {"ok": True}, [("Set-Cookie", gone)])
+
     def _dispatch(self, method: str):
-        path = self.path.split("?", 1)[0]
+        srv = self.server
+        _ctx.remote = srv.remote
+        path = urlsplit(self.path).path
+        host = (self.headers.get("Host") or "").lower()
+        # 1. Who is this, and are they talking to us by a name we own?
+        if not security.host_ok(host, srv.remote, srv.server_address[1]):
+            return self._json(400, {"error": "unexpected host"})
+        if srv.remote and not security.is_private(self.client_address[0]):
+            return self._json(403, {"error": "forbidden"})
+        # 2. Requests started by another website are refused (CSRF / DNS-rebinding).
+        api_call = path.startswith("/api/") or method != "GET"
+        if api_call and self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
+            return self._json(403, {"error": "cross-site request blocked"})
+        origin = self.headers.get("Origin")
+        if origin and urlsplit(origin).netloc.lower() != host:
+            return self._json(403, {"error": "forbidden origin"})
+        # 3. Read a bounded body.
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return self._json(400, {"error": "bad request"})
+        if length < 0 or length > MAX_BODY:
+            return self._json(413, {"error": "request too large"})
+        raw = self.rfile.read(length) if length else b""
+        # 4. Login gate for the phone listener.
+        if path == "/api/login" and method == "POST":
+            try:
+                body = json.loads(raw or b"{}")
+            except ValueError:
+                body = {}
+            return self._login(body if isinstance(body, dict) else {})
+        if path == "/api/logout" and method == "POST":
+            return self._logout()
+        if not self._authed() and path not in PUBLIC_PATHS:
+            if api_call:
+                return self._json(401, {"error": "login required"})
+            return self._redirect("/login")
+        if srv.remote and LOCAL_ONLY.match(path):
+            return self._json(403, {"error": "This can only be done on the PC itself."})
+        if path == "/login" and self._authed():
+            return self._redirect("/")
+        # 5. Routes.
         if method == "GET" and path.startswith("/previews/"):
             fp = (previews.PREVIEWS / path[len("/previews/"):]).resolve()
             if fp.is_relative_to(previews.PREVIEWS.resolve()) and fp.is_file():
@@ -740,35 +870,38 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, b"Not found", "text/plain")
         if method == "GET" and path == "/api/repo-image":
             qs = parse_qs(urlsplit(self.path).query)
-            raw = _raw_projects().get((qs.get("k") or [""])[0])
-            fp = projects.repo_image(raw, int((qs.get("i") or ["0"])[0])) if raw else None
-            return self._file(fp) if fp else self._send(404, b"Not found", "text/plain")
+            raw_p = _raw_projects().get((qs.get("k") or [""])[0])
+            try:
+                fp = projects.repo_image(raw_p, int((qs.get("i") or ["0"])[0])) if raw_p else None
+            except ValueError:
+                fp = None
+            if fp and fp.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"):
+                return self._file(fp)
+            return self._send(404, b"Not found", "text/plain")
         if path.startswith("/api/"):
-            # Reject cross-site requests: only our own page may call the API.
-            origin = self.headers.get("Origin")
-            if origin and not re.match(r"^http://(127\.0\.0\.1|localhost):\d+$", origin):
-                return self._json(403, {"error": "forbidden origin"})
             for m, pat, fn in ROUTES:
                 match = pat.match(path)
                 if m == method and match:
                     try:
-                        length = int(self.headers.get("Content-Length") or 0)
-                        body = json.loads(self.rfile.read(length) or b"{}") if length else {}
+                        body = json.loads(raw) if raw else {}
+                        if not isinstance(body, dict):
+                            raise ValueError("Expected a JSON object")
                         return self._json(200, fn(body, **match.groupdict()))
-                    except Exception as e:
-                        traceback.print_exc()
-                        return self._json(500, {"error": str(e)})
+                    except ValueError as e:
+                        return self._json(400, {"error": str(e)})
+                    except Exception:
+                        log_error()
+                        return self._json(500, {"error": "Something went wrong. Details are in data/server.log."})
             return self._json(404, {"error": "not found"})
         if method != "GET":
             return self._json(405, {"error": "method not allowed"})
-        rel = "index.html" if path in ("", "/") else path.lstrip("/")
+        rel = "index.html" if path in ("", "/") else "login.html" if path == "/login" else path.lstrip("/")
+        parts = Path(rel).parts
         fp = (STATIC / rel).resolve()
-        if not fp.is_relative_to(STATIC) or not fp.is_file():
+        if (not (len(parts) == 1 or parts[0] == "js") or any(p.startswith(".") for p in parts)
+                or not fp.is_relative_to(STATIC.resolve()) or not fp.is_file() or fp.suffix.lower() not in ROOT_FILES):
             return self._send(404, b"Not found", "text/plain")
-        ctype = mimetypes.guess_type(fp.name)[0] or "application/octet-stream"
-        if ctype.startswith("text/") or ctype.endswith("javascript"):
-            ctype += "; charset=utf-8"
-        self._send(200, fp.read_bytes(), ctype)
+        self._file(fp)
 
     def do_GET(self):
         self._dispatch("GET")
@@ -783,12 +916,85 @@ class Handler(BaseHTTPRequestHandler):
         self._dispatch("DELETE")
 
 
+# ---------------------------------------------------------------- phone (LAN) listener
+
+lan = {"httpd": None, "error": None}
+lan_lock = threading.Lock()
+
+
+def start_lan():
+    with lan_lock:
+        if lan["httpd"]:
+            return
+        lan["error"] = None
+        try:
+            ctx = security.server_context()
+            httpd = TrackerServer(("0.0.0.0", security.LAN_PORT), Handler)
+            httpd.remote, httpd.tls = True, True
+            # Handshake happens lazily in the request thread, so a slow client can't stall the accept loop.
+            httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True, do_handshake_on_connect=False)
+        except Exception as e:
+            lan["error"] = str(e) or e.__class__.__name__
+            return
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        lan["httpd"] = httpd
+
+
+def stop_lan():
+    with lan_lock:
+        h, lan["httpd"] = lan["httpd"], None
+    if h:
+        h.shutdown()
+        h.server_close()
+
+
+def access_payload() -> dict:
+    return {"enabled": security.is_enabled(), "running": bool(lan["httpd"]), "error": lan["error"],
+            "code": security.display_code(), "port": security.LAN_PORT,
+            "urls": [f"https://{ip}:{security.LAN_PORT}/" for ip in security.lan_ips()],
+            "fingerprint": security.fingerprint(), "sessions": security.session_count(),
+            "openssl": security.openssl_available()}
+
+
+@route("GET", r"/api/access")
+def api_access(body, **_):
+    return access_payload()
+
+
+@route("POST", r"/api/access")
+def api_access_set(body, **_):
+    if body.get("enabled"):
+        security.set_enabled(True)
+        start_lan()
+        if lan["error"]:
+            security.set_enabled(False)
+            raise ValueError("Phone access could not start: " + lan["error"])
+    else:
+        security.set_enabled(False)
+        stop_lan()
+    return access_payload()
+
+
+@route("POST", r"/api/access/code")
+def api_access_code(body, **_):
+    security.regenerate_code()
+    return access_payload()
+
+
+@route("POST", r"/api/access/revoke")
+def api_access_revoke(body, **_):
+    security.revoke_all()
+    return access_payload()
+
+
 def serve(port: int = 8765) -> ThreadingHTTPServer:
     # Windows can map .js/.css to text/plain via the registry; browsers then refuse them.
     mimetypes.add_type("text/javascript", ".js")
     mimetypes.add_type("text/css", ".css")
     mimetypes.add_type("image/webp", ".webp")
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    httpd = TrackerServer(("127.0.0.1", port), Handler)
+    if security.is_enabled():
+        threading.Thread(target=start_lan, daemon=True).start()
     if not list(SNAPSHOTS.glob("*.json")):
         start_scan()  # first launch: populate the digital dashboard
     else:
