@@ -1,0 +1,83 @@
+// Settings dialog: computers feeding the tracker, the synced folder, the second-PC setup kit, AI model.
+import { esc, ago, api, toast } from "../util.js";
+import { icon } from "../icons.js";
+import { state } from "../state.js";
+
+export const machineLabel = (m) => (m === state.data?.settings.local_machine ? "This PC" : m);
+
+/** "YTPC" / "Both PCs" tag for projects that aren't only on this PC. */
+export function machineTag(p) {
+  const ms = p.facts.machines || [];
+  const local = state.data.settings.local_machine;
+  if (ms.length > 1) return `<span class="pc-tag" title="${esc(ms.join(", "))}">${icon("layers", 11)}${ms.length} PCs</span>`;
+  if (ms[0] && ms[0] !== local) return `<span class="pc-tag" title="Lives on ${esc(ms[0])}">${icon("cpu", 11)}${esc(ms[0])}</span>`;
+  return "";
+}
+
+function machinesTable() {
+  const ms = state.data.digital.machines;
+  if (!ms.length) return `<p class="muted">No scans yet.</p>`;
+  return `<table class="mtable"><thead><tr><th>Computer</th><th>Last scan</th><th>Projects</th><th>Source</th></tr></thead><tbody>${ms.map((m) => {
+    const hrs = (Date.now() - new Date(m.scanned_at)) / 3600000;
+    const stale = !m.local && hrs > 2;
+    return `<tr><td><b>${esc(m.machine)}</b>${m.local ? ` <span class="pc-tag">this PC</span>` : ""}</td>
+      <td class="${stale ? "soon" : ""}">${esc(ago(m.scanned_at))}${stale ? " · not syncing?" : ""}</td>
+      <td>${m.projects}</td><td>${m.local ? "Rescan button" : "OneDrive sync"}</td></tr>`;
+  }).join("")}</tbody></table>`;
+}
+
+function body() {
+  const s = state.data.settings;
+  const others = state.data.digital.machines.filter((m) => !m.local);
+  return `<div class="form settings">
+    <div class="dlg-head"><h2>${icon("cpu", 20)}Computers & sync</h2><button class="icon-x always" value="close" aria-label="Close">${icon("x", 16)}</button></div>
+    <section><h3>Computers</h3>${machinesTable()}</section>
+    <section><h3>Home PC (YTPC) setup</h3>
+      ${others.length ? `<p class="ok-line">${icon("checkCircle", 15)}Receiving snapshots from ${others.map((m) => esc(m.machine)).join(", ")}.</p>` : ""}
+      <ol class="steps-list">
+        <li>Create the setup kit. It's saved in your synced folder, so OneDrive carries it to YTPC.</li>
+        <li>On YTPC, open <b>OneDrive › ProjectTracker › ytpc-kit</b> and double-click <b>Install on this PC.cmd</b> (needs Python 3).</li>
+        <li>YTPC scans every 30 minutes, and its projects appear here automatically. The same repo on both PCs shows as one project.</li>
+      </ol>
+      <div class="row-actions">
+        <button type="button" class="btn primary" data-act="createKit" ${s.sync_dir ? "" : "disabled"}>${icon("rocket", 15)}${s.kit_ready ? "Update setup kit" : "Create setup kit"}</button>
+        <button type="button" class="btn" data-act="openSync" ${s.sync_ok ? "" : "disabled"}>${icon("folder", 15)}Open synced folder</button>
+      </div>
+      ${s.kit_ready ? `<p class="muted small">${icon("checkCircle", 13)} Kit is ready in ${esc(s.sync_dir)}\\ytpc-kit</p>` : ""}
+    </section>
+    <section><h3>Synced folder</h3>
+      <div class="inline-add"><input name="sync_dir" value="${esc(s.sync_dir)}" placeholder="e.g. C:\\Users\\you\\OneDrive\\ProjectTracker" aria-label="Synced folder">
+        <button type="button" class="btn" data-act="saveSyncDir">Save</button></div>
+      <p class="muted small">Any folder both PCs sync (OneDrive, Google Drive, Dropbox). Snapshots go in its <span class="mono">snapshots</span> subfolder.${s.sync_ok ? "" : " The folder will be created with the kit."}</p>
+    </section>
+  </div>`;
+}
+
+let dlg = null;
+export function openSettings() {
+  dlg?.remove();
+  dlg = document.createElement("dialog");
+  dlg.className = "settings-dlg";
+  dlg.innerHTML = `<form method="dialog">${body()}</form>`;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+  dlg.addEventListener("close", () => { dlg.remove(); dlg = null; });
+}
+function refresh() { if (dlg) dlg.querySelector("form").innerHTML = body(); }
+
+export const settingsActions = {
+  openSettings,
+  async createKit() {
+    const r = await api("POST", "/api/sync/kit");
+    Object.assign(state.data.settings, r);
+    refresh();
+    toast("Setup kit saved to " + r.path);
+  },
+  async openSync() { await api("POST", "/api/sync/open"); },
+  async saveSyncDir() {
+    const v = dlg.querySelector("input[name=sync_dir]").value;
+    Object.assign(state.data.settings, await api("POST", "/api/settings", { sync_dir: v }));
+    refresh();
+    toast("Synced folder saved");
+  },
+};
