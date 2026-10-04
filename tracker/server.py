@@ -298,6 +298,12 @@ def load_snapshots() -> list[dict]:
         snap["_source"] = source
         if m not in best or snap.get("scanned_at", "") > best[m].get("scanned_at", ""):
             best[m] = snap
+    from .dashboard_transfer import saved_snapshots
+    for snap in saved_snapshots(db):
+        snap['_source'] = 'owner import'
+        m = snap['machine']
+        if m not in best or snap.get('scanned_at', '') > best[m].get('scanned_at', ''):
+            best[m] = snap
     return sorted(best.values(), key=lambda s: (s["machine"] != LOCAL_MACHINE, s["machine"]))
 
 
@@ -320,6 +326,21 @@ def _identity(p: dict) -> str | None:
     first = (p.get("git") or {}).get("first_commit")
     if first and p.get("kind") == "folder":
         return f"root:{p['name'].lower()}:{first}"
+    return None
+
+
+def _central_target(raw, collected):
+    identity = _identity(raw)
+    if identity:
+        for live in collected:
+            if _identity(live) == identity: return live['key']
+    # An unremoted project can be matched to its exact observed folder, never
+    # merely its display name. This handles existing local-only repositories.
+    if not (raw.get('git') or {}).get('remote') and raw.get('path'):
+        path = raw['path'].replace('\\', '/').rstrip('/').lower()
+        for live in collected:
+            if not (live.get('git') or {}).get('remote') and str(live.get('path') or '').replace('\\', '/').rstrip('/').lower() == path:
+                return live['key']
     return None
 
 
@@ -372,22 +393,34 @@ def digital_view() -> dict:
                          "local": snap["machine"] == LOCAL_MACHINE, "projects": len(snap["projects"]),
                          "totals": snap.get("totals")})
         for p in snap["projects"]:
-            key = f"{snap['machine']}|{p['key']}"
+            key = p.get('owner_key') or f"{snap['machine']}|{p['key']}"
             by_key[key] = dict(p, key=key, machine=snap["machine"], scan_key=p["key"], machines=[snap["machine"]])
 
     # Central collector metadata is authoritative for ingested repositories.
     collected = central.raw_projects()
-    canonical = {_identity(p):p['key'] for p in collected if _identity(p)}
-    identities = set(canonical)
+    targets = {key: _central_target(raw, collected) for key, raw in by_key.items()}
+    # Retain saved dashboard facts while live collector observations update Git
+    # and filesystem metadata. Imports do not run session adapters.
+    for key, raw in by_key.items():
+        target = targets[key]
+        if target:
+            live = next(p for p in collected if p['key'] == target)
+            for field in ('activity', 'ai_tools', 'ai_first', 'ai_last', 'created', 'readme', 'docs', 'checklist', 'stack'):
+                if raw.get(field): live[field] = raw[field]
+            subjects = {commit['hash']: commit.get('subject') for commit in (raw.get('git') or {}).get('recent_commits', [])}
+            for commit in (live.get('git') or {}).get('recent_commits', []):
+                if subjects.get(commit['hash']): commit['subject'] = subjects[commit['hash']]
     # Carry existing owner data over when a snapshot repository first becomes central.
     with db.conn() as c:
         for old_key, raw in by_key.items():
-            target = canonical.get(_identity(raw))
+            target = targets[old_key]
             if not target:
                 continue
             for table, column in (('items','project_key'), ('digital_overrides','key'), ('analyses','key'), ('directives','project_key'), ('plan_tasks','project_key')):
                 c.execute(f'UPDATE OR IGNORE {table} SET {column}=? WHERE {column}=?', (target, old_key))
-    by_key = {k:p for k,p in by_key.items() if not _identity(p) or _identity(p) not in identities}
+            c.execute('UPDATE OR IGNORE dashboard_import_previews SET project_key=? WHERE project_key=?', (target, old_key))
+    overrides = db.overrides()
+    by_key = {k:p for k,p in by_key.items() if not targets[k]}
     by_key.update({p['key']:p for p in collected})
 
     projects, hidden = {}, []
@@ -495,8 +528,16 @@ def project_list(view: dict) -> list[dict]:
     items = db.items()
     errors = {k: v["error"] for k, v in preview_jobs.items() if v.get("status") == "error"}
     result = []
+    from .dashboard_transfer import initialize
+    initialize(db)
+    with db.conn() as c:
+        imported_previews = {row['project_key']: row['name'] for row in c.execute('SELECT project_key,name FROM dashboard_import_previews')}
     for raw in view['projects']:
         p = projects.build(raw, overrides.get(raw['key'], {}), items.get(raw['key'], []), errors)
+        p['facts']['local'] = not is_cloud() and p['facts']['local']
+        if not p['previewImage'] and raw['key'] in imported_previews:
+            p['previewImage'] = '/previews/' + imported_previews[raw['key']]
+            p['previewKind'] = 'screenshot'
         if raw.get('central'):
             p['intelligence'] = raw['central']
             p['lastSynced'] = raw['last_synced']
@@ -524,6 +565,30 @@ def api_state(body, **_):
 @route('GET', r'/api/integrations')
 def api_integrations(body, **_):
     return central.snapshot()
+
+
+@route('GET', r'/api/dashboard/export')
+def api_dashboard_export(body, **_):
+    from .dashboard_transfer import export_dashboard
+    saved = digital_view()
+    snapshot = {'machine': LOCAL_MACHINE, 'scanned_at': datetime.now(timezone.utc).isoformat(),
+                'projects': [dict(p, owner_key=p['key']) for p in saved['projects']], 'general': {}}
+    return export_dashboard(db, [snapshot], LOCAL_MACHINE, previews.PREVIEWS)
+
+
+@route('POST', r'/api/dashboard/import')
+def api_dashboard_import(body, **_):
+    from .dashboard_transfer import import_dashboard, validate
+    validate(body, db)
+    collected = central.raw_projects()
+    project_map = {}
+    for snap in body.get('snapshots', []) if isinstance(body.get('snapshots'), list) else []:
+        if not isinstance(snap, dict): continue
+        for p in snap.get('projects', []) if isinstance(snap.get('projects'), list) else []:
+            if not isinstance(p, dict): continue
+            target = _central_target(p, collected)
+            if target: project_map[p.get('owner_key') or snap['machine'] + '|' + p['key']] = target
+    return import_dashboard(db, body, project_map)
 
 
 @route('POST', r'/api/integrations/devices')
@@ -707,6 +772,10 @@ def api_planner_instruction(body, **_):
 
 @route("POST", r"/api/planner/regenerate")
 def api_planner_regenerate(body, **_):
+    if is_cloud():
+        plist = _planner_projects()
+        planner.generate(db, plist, planner.today(), use_llm=False)
+        return {'planner': planner.payload(db, plist), 'projects': plist}
     return {"started": start_planner_job("regenerate"), "job": planner_job}
 
 
@@ -1047,7 +1116,7 @@ class Handler(BaseHTTPRequestHandler):
             if api_call:
                 return self._json(401, {"error": "login required"})
             return self._redirect("/login")
-        if srv.cloud and re.match(r"^/api/(scan|analyze(?:/|$)|previews$|planner/(?:instruction|regenerate)$)", path):
+        if srv.cloud and re.match(r"^/api/(scan|analyze(?:/|$)|previews$|planner/instruction$)", path):
             return self._json(501, {"error": "This feature requires the local development server."})
         if (srv.remote or srv.auth_required) and LOCAL_ONLY.match(path):
             return self._json(403, {"error": "This can only be done on the PC itself."})
@@ -1058,6 +1127,11 @@ class Handler(BaseHTTPRequestHandler):
             fp = (previews.PREVIEWS / path[len("/previews/"):]).resolve()
             if fp.is_relative_to(previews.PREVIEWS.resolve()) and fp.is_file():
                 return self._file(fp)
+            from .dashboard_transfer import initialize
+            initialize(db)
+            with db.conn() as c:
+                image = c.execute('SELECT data FROM dashboard_import_previews WHERE name=?', (path[len('/previews/'):],)).fetchone()
+            if image: return self._send(200, image['data'], 'image/png')
             return self._send(404, b"Not found", "text/plain")
         if method == "GET" and path == "/api/repo-image":
             qs = parse_qs(urlsplit(self.path).query)

@@ -171,6 +171,22 @@ async function startPlannerJob(url, body) {
 
 const ACTIONS = {
   ...settingsActions,
+  async exportDashboard() {
+    const bundle = await api('GET', '/api/dashboard/export');
+    const url = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], {type:'application/json'}));
+    const link = document.createElement('a'); link.href=url; link.download='project-dashboard-export.json'; link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    toast('Dashboard export downloaded');
+  },
+  async importDashboard(el) {
+    const file = el.elements.bundle.files[0];
+    if (!file || file.size > 19000000) throw new Error('Choose a dashboard JSON export under 19 MB.');
+    const bundle = JSON.parse(await file.text());
+    const result = await api('POST', '/api/dashboard/import', bundle);
+    await load();
+    document.getElementById('dashboardTransferStatus').textContent = `Import complete: ${Object.values(result.imported).reduce((a,b)=>a+b,0)} saved records added. Existing records preserved.`;
+    toast('Saved dashboard imported');
+  },
   async centralSync() {
     const status = document.getElementById('centralSyncStatus');
     if (status) status.textContent = 'Syncing… requesting collector updates';
@@ -240,7 +256,10 @@ const ACTIONS = {
     state.planUi.draft = "";
     render();
   },
-  async planRegenerate() { await startPlannerJob("/api/planner/regenerate", {}); },
+  async planRegenerate() {
+    if (state.data.access?.cloud) { await planCall('POST', '/api/planner/regenerate', {}); toast('Plan updated from your saved tasks and priorities'); }
+    else await startPlannerJob("/api/planner/regenerate", {});
+  },
 
   // AI
   analyzeOne(el) { queueAnalysis({ keys: [el.dataset.key] }); },

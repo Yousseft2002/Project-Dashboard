@@ -78,7 +78,7 @@ function focusHero(pl) {
         : `<h2 class="fh-title muted">N/A</h2><p class="fh-text">No open tasks to plan yet. Add tasks to a project, or tell the AI what you're working on.</p>`}
       ${running}${warn}${err}
       <div class="fh-actions">
-        <button class="btn primary" data-act="planRegenerate" ${busy() || cloud ? "disabled" : ""} title="${cloud ? "AI planning requires the local Claude Code CLI" : ""}">${icon("refresh", 15, busy() ? "spin" : "")}${cloud ? "AI plan local only" : "Regenerate plan"}</button>
+        <button class="btn primary" data-act="planRegenerate" ${busy() ? "disabled" : ""} title="${cloud ? "Rebuild from saved tasks, priorities and instructions" : ""}">${icon("refresh", 15, busy() ? "spin" : "")}Regenerate plan</button>
         <a class="btn" href="#/history">${icon("calendar", 15)}Daily history</a>
         ${p?.generatedAt ? `<span class="muted fh-when">Planned ${new Date(p.generatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>` : ""}
       </div>
