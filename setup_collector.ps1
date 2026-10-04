@@ -1,7 +1,7 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = (Join-Path $PSScriptRoot 'collector.config.json'),
+    [string]$ConfigPath,
     [string]$DeviceName,
     [string]$ServerUrl,
     [string[]]$Workspaces,
@@ -10,6 +10,7 @@ param(
     [switch]$NoRun
 )
 $ErrorActionPreference = 'Stop'
+if (-not $ConfigPath) { $ConfigPath = Join-Path $PSScriptRoot 'collector.config.json' }
 Write-Host 'PROJECT PLANNER COLLECTOR SETUP'
 Write-Host 'Your browser password is not used. Approve a pairing code in Settings -> Integrations, or use a separate collector token.'
 
