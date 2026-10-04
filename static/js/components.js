@@ -101,6 +101,7 @@ export function projectCard(p, i = 0) {
         </div>
       </div>
     </div>
+    ${p.lastSynced ? `<p class="muted small" style="padding:0 16px">${Date.now()-Date.parse(p.lastSynced)>86400000?'STALE · ':''}Synced ${esc(ago(p.lastSynced))} · ${esc(p.intelligence.observations.map(o=>o.device_id).join(', '))}</p>` : ''}
     <div class="pc-foot">${jobLine(p.id)}<span class="pc-open">Open project ${icon("arrowRight", 14)}</span></div>
   </a>`;
 }

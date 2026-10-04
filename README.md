@@ -1,5 +1,11 @@
 # Project Tracker
 
+## Central collector upgrade
+
+The incremental collector pipeline, device heartbeats, repository matching, local AI session metadata, owner diagnostics and human instructions are implemented. Start with [the audit](AUDIT.md) and [collector/deployment setup](COLLECTOR_SETUP.md). GitHub/Render API connectors and PostgreSQL are subsequent phases. The public Render site is not automatically changed by these local edits.
+
+New databases start empty rather than seeding example physical projects. For production storage, `TRACKER_DATA_DIR` relocates all server data to a configured directory; attach actual durable storage before relying on it. The older cloud-mirror instructions below describe the legacy snapshot workflow; mirroring is disabled once collectors are registered to preserve multi-device data.
+
 Personal command center for every project Youssef is building, digital and physical.
 
 **Open it:** double-click **Project Tracker** on the desktop. If it's already

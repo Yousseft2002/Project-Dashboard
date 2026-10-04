@@ -178,6 +178,14 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(self, *args):
+        try:
+            return super().__exit__(*args)
+        finally:
+            self.close()
+
+
 class DB:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -193,11 +201,10 @@ class DB:
             for col, typ in ITEM_COLUMNS.items():
                 if col not in have:
                     c.execute(f"ALTER TABLE items ADD COLUMN {col} {typ}")
-            if fresh:
-                self._seed(c)
+            # A new dashboard starts empty. Existing owner data is preserved.
 
     def conn(self) -> sqlite3.Connection:
-        c = sqlite3.connect(self.path)
+        c = sqlite3.connect(self.path, timeout=30, factory=ClosingConnection)
         c.row_factory = sqlite3.Row
         c.execute("PRAGMA foreign_keys = ON")
         return c

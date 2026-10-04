@@ -12,6 +12,7 @@ import {
 import { state } from "../state.js";
 import { physicalMini } from "./physical.js";
 import { plannerBlock } from "./planner.js";
+import { sourcePanel, timeline, instructionForm } from './integrations.js';
 
 export function dashboardView() {
   const projects = state.data.projects;
@@ -21,11 +22,16 @@ export function dashboardView() {
     <div><div class="eyebrow">${icon("layers", 14)}Command center</div><h1>What you're building</h1>
       <p>${s.total} digital projects · ${s.active} active · ${fmt(s.openTasks)} open tasks${s.analyzed < s.total ? ` · ${s.total - s.analyzed} not yet analyzed by AI` : ""}</p></div>
   </div>
+  ${sourcePanel()}
+  ${instructionForm()}
   ${plannerBlock()}
   ${portfolioOverview(projects, s)}
   ${focusRow(projects)}
   ${projectsSection(projects)}
-  ${bottomRow(projects)}`;
+  ${bottomRow(projects)}
+  <section class="card" style="padding:20px"><h2>Ingested activity timeline</h2>
+    <label>Source <select data-act="filterCentralActivity"><option value="all">All</option>${['git','workspace','github','claude','codex','vscode','render'].map(s=>`<option value="${s}" ${state.ui.centralSource===s?'selected':''}>${s}</option>`).join('')}</select></label>
+    ${timeline((state.data.central?.activity || []).filter(e=>!state.ui.centralSource || state.ui.centralSource==='all' || e.source===state.ui.centralSource))}</section>`;
 }
 
 // ------------------------------------------------------------------ portfolio overview

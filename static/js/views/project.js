@@ -9,6 +9,7 @@ import {
 } from "../components.js";
 import { state, project } from "../state.js";
 import { machineLabel } from "./settings.js";
+import { timeline } from './integrations.js';
 
 const SECTIONS = [["overview", "Overview"], ["tasks", "Tasks"], ["milestones", "Milestones"], ["issues", "Blockers & bugs"],
   ["insights", "AI insights"], ["activity", "Activity"], ["code", "Code"]];
@@ -19,6 +20,7 @@ export function projectView(id) {
   return `
   <a class="back" href="#/">${icon("arrowLeft", 15)}Dashboard</a>
   ${hero(p)}
+  ${p.intelligence ? `<section class="card" style="padding:20px"><h2>Collector intelligence</h2><p>Last synced ${esc(ago(p.lastSynced))}${Date.now()-Date.parse(p.lastSynced)>86400000?' · STALE':''} · ${p.facts.todoCount || 0} TODO/FIXME markers observed</p>${p.intelligence.observations.map(o=>`<p><b>${esc(o.device_id)}</b> · ${esc(o.branch || 'No branch')} · ${o.changed_files === null ? 'Git status unavailable' : o.changed_files + ' changed files'} · Last activity ${o.last_activity ? esc(ago(o.last_activity)) : 'unavailable'} · synced ${esc(ago(o.synced_at))}</p>`).join('')}<h3>Chronological activity</h3>${timeline(p.intelligence.timeline)}</section>` : ''}
   <section class="card lc-card">${lifecycle(p.phase, p.phaseProgress)}
     ${p.ai?.phaseReason ? `<p class="lc-reason">${icon("sparkles", 13)}${esc(p.ai.phaseReason)}</p>` : `<p class="lc-reason muted">Stage ${esc(sourceHint(p.sources.phase))}. ${p.sources.phase === "estimate" ? "Run AI analysis for an accurate stage." : ""}</p>`}
   </section>
