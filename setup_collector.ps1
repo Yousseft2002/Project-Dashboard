@@ -55,8 +55,13 @@ if (-not $Workspaces) {
     Write-Host 'Suggested folders (nothing is scanned/uploaded until you select them):'
     $suggestionJson = & $pythonExe @pythonPrefix $collectorScript suggest
     if ($LASTEXITCODE -ne 0) { throw 'Workspace suggestions failed.' }
-    $suggestions = @($suggestionJson | ConvertFrom-Json)
-    for ($i = 0; $i -lt $suggestions.Count; $i++) { Write-Host "$($i+1). $($suggestions[$i].path) [$($suggestions[$i].source)]" }
+    # Windows PowerShell 5.1 can return the JSON array as one pipeline object.
+    $parsedSuggestions = ($suggestionJson -join "`n") | ConvertFrom-Json
+    $suggestions = @($parsedSuggestions | ForEach-Object { $_ })
+    for ($i = 0; $i -lt $suggestions.Count; $i++) {
+        Write-Host "$($i+1). $($suggestions[$i].path)"
+        Write-Host "   $($suggestions[$i].source)"
+    }
     $selected = Read-Host 'Select folder numbers, separated by commas (blank selects none)'
     $chosen = @()
     if ($selected) {
@@ -74,6 +79,11 @@ if (-not $Workspaces) {
 }
 if (-not $Workspaces.Count) { throw 'Select at least one workspace folder.' }
 foreach ($folder in $Workspaces) { if (-not (Test-Path -LiteralPath $folder -PathType Container)) { throw "Workspace folder is unavailable: $folder" } }
+$Workspaces = @($Workspaces | ForEach-Object { (Resolve-Path -LiteralPath $_).Path } | Select-Object -Unique)
+Write-Host ''
+Write-Host 'Selected workspaces:'
+foreach ($folder in $Workspaces) { Write-Host "- $folder" }
+if ((Read-Host 'Proceed? [Y/n]') -match '^[nN]' ) { Write-Host 'Cancelled. Nothing scanned or uploaded.'; exit 0 }
 
 $installationId = [guid]::NewGuid().ToString()
 if ($previous -and $previous.installation_id) { $installationId = $previous.installation_id }
