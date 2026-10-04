@@ -24,7 +24,7 @@ export function integrationsView() {
   const c = state.data.central;
   return `<h1>Settings → Integrations</h1><a href="#/">Dashboard</a>${sourcePanel()}
     <section class="card" style="padding:20px"><h2>Connect a computer</h2>
-    <p>On that Windows computer, run <code>powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_collector.ps1</code> from the repository folder. It suggests workspaces, pairs this computer, proves heartbeat, then verifies one Git repository before syncing more.</p>
+    <p>On that Windows computer, run <code>powershell -NoProfile -ExecutionPolicy Bypass -File .\\setup_collector.ps1</code> from the repository folder. It suggests workspaces, pairs this computer, proves heartbeat, then verifies one Git repository before syncing more.</p>
     <h3>Approve a pairing code</h3><p>Approve only the exact code displayed by setup on your own computer. Credentials are generated locally, protected with Windows DPAPI, and are separate from your browser password.</p>
     <form data-act="approveCollectorPair"><label>Pairing code <input name="code" required pattern="[A-Za-z0-9]{12}" maxlength="12"></label><button class="btn" type="submit">Approve this computer</button></form>
     ${(c.pairings || []).map(p=>`<p>Pending: ${esc(p.device_name)} · ${esc(p.platform)} · code <b>${esc(p.code)}</b> · expires ${esc(p.expires_at)}</p>`).join('')}
@@ -33,6 +33,11 @@ export function integrationsView() {
     <form data-act="registerCollector"><label>Device ID <input name="device" required pattern="[A-Za-z0-9_.-]{1,80}" placeholder="YousseF-Desktop"></label><button class="btn" type="submit">Generate collector token</button></form>
     <div id="collectorCredential" role="status"></div>
     <p>Copy collector.config.example.json to collector.config.json, set your workspace folders, then run <code>python collector.py --once</code> to test or <code>python collector.py</code> to sync periodically.</p>
+    </section><section class="card" style="padding:20px;margin-top:20px"><h2>Transfer saved dashboard data</h2>
+    <p>Bring saved projects, tasks, analyses, daily plans and physical builds from your local dashboard. Existing collector credentials and owner edits are preserved. This does not scan folders or read AI chat storage.</p>
+    <button class="btn" data-act="exportDashboard">Download dashboard export</button>
+    <form data-act="importDashboard"><label>Dashboard export <input type="file" name="bundle" accept=".json,application/json" required></label><button class="btn" type="submit">Import saved dashboard</button></form>
+    <p id="dashboardTransferStatus" role="status"></p>
     </section><section class="card" style="padding:20px;margin-top:20px"><h2>Source health</h2>
     ${c.sources.map(s=>`<p><b>${esc(s.device_id)} / ${esc(s.name)}</b> · ${esc(s.status)} · Last success: ${s.last_success ? esc(ago(s.last_success)) : 'never'} · ${s.projects} projects<br>${esc([...s.errors,...s.warnings].join('; '))}</p>`).join('') || '<p>No source reports received.</p>'}
     ${c.devices.map(d=>`<p>${esc(d.id)} <button class="btn" data-act="revokeCollector" data-device="${esc(d.id)}">Revoke token</button></p>`).join('')}</section>`;
