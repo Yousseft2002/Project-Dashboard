@@ -233,7 +233,8 @@ function settingsView(){
 }
 function render(){
   const app=document.getElementById("app"),page=state.page||"dashboard";
-  document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
+  const activePage=page==="project"?"dashboard":page;
+  document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===activePage));
   if(page==="project")app.innerHTML=projectDetail(state.projects.find(p=>p.id===state.projectId));
   else if(page==="physical")app.innerHTML=physicalView();
   else if(page==="yt")app.innerHTML=ytView();
@@ -282,7 +283,7 @@ function importData(file){
         if(!raw||typeof raw!=="object"||!String(raw.name||"").trim())throw new Error(`Physical build ${i+1} needs a name.`);
         return {...raw,id:String(raw.id||id()).slice(0,150),name:String(raw.name).slice(0,100),category:String(raw.category||"Other").slice(0,60),status:["planning","active","paused","done"].includes(raw.status)?raw.status:"planning",description:String(raw.description||"").slice(0,10000),budget:raw.budget==null?null:Math.max(0,Number(raw.budget)||0),color:Math.abs(Number(raw.color)||0)%8,target_date:String(raw.target_date||"").slice(0,10),milestones:bounded(Array.isArray(raw.milestones)?raw.milestones:[]).map(m=>{if(!m||typeof m!=="object")throw new Error(`Physical build ${i+1} has an invalid milestone.`);return {id:String(m.id||id()).slice(0,150),title:String(m.title||"Untitled milestone").slice(0,300),done:!!m.done}}),updates:bounded(Array.isArray(raw.updates)?raw.updates:[]).map(u=>{if(!u||typeof u!=="object")throw new Error(`Physical build ${i+1} has an invalid update.`);return {id:String(u.id||id()).slice(0,150),day:String(u.day||today()).slice(0,10),progress:u.progress==null?null:Math.max(0,Math.min(100,Number(u.progress)||0)),note:String(u.note||"").slice(0,2000),hours:Math.max(0,Number(u.hours)||0),cost:Math.max(0,Number(u.cost)||0)}})};
       });
-      state.projects=importedProjects;state.physical=importedPhysical;state.analytics=null;
+      state.projects=importedProjects;state.physical=importedPhysical;state.analytics=null;state.ui={...state.ui,status:"all",type:"all",q:""};
       state.theme=obj.theme==="dark"?"dark":"light";document.documentElement.dataset.theme=state.theme;persist();go("dashboard");showToast("JSON data imported.");
     }catch(e){showToast("Could not import JSON: "+e.message);}
   };
