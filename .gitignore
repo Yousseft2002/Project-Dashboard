@@ -8,3 +8,4 @@ static/Python/
 *.db
 *.sqlite
 *.sqlite3
+collector.config.json

@@ -16,8 +16,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PREVIEWS = ROOT / "data" / "previews"
-PROFILE = ROOT / "data" / "browser-profile"
+DATA = Path(os.environ.get('TRACKER_DATA_DIR', str(ROOT / 'data')))
+PREVIEWS = DATA / "previews"
+PROFILE = DATA / "browser-profile"
 DESKTOP = (1280, 800)
 PHONE = (390, 844)
 BLANKISH = 80_000  # bytes; a mostly blank 1280x800 PNG compresses below this

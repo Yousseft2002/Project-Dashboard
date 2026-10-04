@@ -20,7 +20,7 @@ import time
 from collections import deque
 from pathlib import Path
 
-DATA = Path(__file__).resolve().parent.parent / "data"
+DATA = Path(os.environ.get('TRACKER_DATA_DIR', str(Path(__file__).resolve().parent.parent / "data")))
 ACCESS_FILE = DATA / "access.json"
 TLS_DIR = DATA / "tls"
 

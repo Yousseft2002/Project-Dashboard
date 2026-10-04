@@ -24,13 +24,15 @@ from collections import deque
 
 from . import analyzer, planner, previews, projects, scanner, security
 from .db import DB
+from .central import CentralStore
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
-DATA = ROOT / "data"
+DATA = Path(os.environ.get("TRACKER_DATA_DIR", str(ROOT / "data")))
 SNAPSHOTS = DATA / "snapshots"
 
 db = DB(DATA / "tracker.db")
+central = CentralStore(db)
 _ctx = threading.local()
 
 
@@ -371,6 +373,21 @@ def digital_view() -> dict:
             key = f"{snap['machine']}|{p['key']}"
             by_key[key] = dict(p, key=key, machine=snap["machine"], scan_key=p["key"], machines=[snap["machine"]])
 
+    # Central collector metadata is authoritative for ingested repositories.
+    collected = central.raw_projects()
+    canonical = {_identity(p):p['key'] for p in collected if _identity(p)}
+    identities = set(canonical)
+    # Carry existing owner data over when a snapshot repository first becomes central.
+    with db.conn() as c:
+        for old_key, raw in by_key.items():
+            target = canonical.get(_identity(raw))
+            if not target:
+                continue
+            for table, column in (('items','project_key'), ('digital_overrides','key'), ('analyses','key'), ('directives','project_key'), ('plan_tasks','project_key')):
+                c.execute(f'UPDATE OR IGNORE {table} SET {column}=? WHERE {column}=?', (target, old_key))
+    by_key = {k:p for k,p in by_key.items() if not _identity(p) or _identity(p) not in identities}
+    by_key.update({p['key']:p for p in collected})
+
     projects, hidden = {}, []
     for key, p in by_key.items():
         o = overrides.get(key, {})
@@ -475,15 +492,23 @@ def project_list(view: dict) -> list[dict]:
     overrides = db.overrides()
     items = db.items()
     errors = {k: v["error"] for k, v in preview_jobs.items() if v.get("status") == "error"}
-    return [projects.build(raw, overrides.get(raw["key"], {}), items.get(raw["key"], []), errors)
-            for raw in view["projects"]]
+    result = []
+    for raw in view['projects']:
+        p = projects.build(raw, overrides.get(raw['key'], {}), items.get(raw['key'], []), errors)
+        if raw.get('central'):
+            p['intelligence'] = raw['central']
+            p['lastSynced'] = raw['last_synced']
+            p['facts']['todoCount'] = raw.get('todo_count', 0)
+            p['facts']['local'] = not is_cloud() and p['facts']['local']
+        result.append(p)
+    return result
 
 
 @route("GET", r"/api/state")
 def api_state(body, **_):
     view = digital_view()
     plist = project_list(view)
-    return {"projects": plist, "planner": planner.payload(db, plist),
+    return {"projects": plist, "planner": planner.payload(db, plist), "central": central.snapshot(),
             "digital": {"hidden": view["hidden"], "machines": view["machines"], "general": view["general"]},
             "physical": physical_view(), "scan": scan_state,
             "meta": {"phases": analyzer.PHASES, "types": analyzer.TYPES, "statuses": projects.STATUSES,
@@ -492,6 +517,57 @@ def api_state(body, **_):
             "machine": socket.gethostname(), "analysis": analysis_status(),
             "access": {"remote": is_remote() or is_cloud(), "cloud": is_cloud()},
             "settings": settings_payload()}
+
+
+@route('GET', r'/api/integrations')
+def api_integrations(body, **_):
+    return central.snapshot()
+
+
+@route('POST', r'/api/integrations/devices')
+def api_register_device(body, **_):
+    return central.register(body.get('device_id'))
+
+
+@route('POST', r'/api/integrations/revoke')
+def api_revoke_device(body, **_):
+    with db.conn() as c:
+        c.execute('UPDATE devices SET revoked=1 WHERE id=?', (str(body.get('device_id', '')),))
+    return {'ok': True}
+
+
+@route('POST', r'/api/integrations/sync')
+def api_request_sync(body, **_):
+    from .central import now
+    with db.conn() as c:
+        c.execute('INSERT INTO sync_requests(device_id,requested_at) SELECT id,? FROM devices WHERE revoked=0 ON CONFLICT(device_id) DO UPDATE SET requested_at=excluded.requested_at', (now(),))
+    return {'ok': True, 'message': 'Sync requested. Online collectors pick it up at their next heartbeat.'}
+
+
+@route('POST', r'/api/integrations/instruction')
+def api_human_instruction(body, **_):
+    text = str(body.get('text') or '').strip()
+    plist = _planner_projects()
+    selected = next((p for p in plist if p['id'] == body.get('project_id')), None)
+    if not selected or not text or len(text) > 2000:
+        raise ValueError('Choose a project and enter an instruction (maximum 2000 characters)')
+    parsed = {'directives':[{'project_name': selected['name'], 'summary':text, 'kind':'focus', 'source':'me', 'strength':'high', 'persist':'until_changed', 'keywords':[], 'proposed_tasks':[]} ]}
+    planner.apply_directives(db, plist, text, parsed)
+    # The literal human task is preserved; no model interpretation is required.
+    with db.conn() as c:
+        exists = c.execute("SELECT id FROM items WHERE project_key=? AND title=? AND source='user' AND status!='dismissed'", (selected['id'],text[:300])).fetchone()
+    if not exists:
+        db.add_item(selected['id'], {'title':text[:300], 'detail':text, 'priority':'high', 'via':'human_instruction'})
+    planner.generate(db, _planner_projects(), use_llm=False)
+    return {'ok':True}
+
+
+@route('GET', r'/api/debug')
+def api_debug(body, **_):
+    with db.conn() as c:
+        healthy = c.execute('PRAGMA quick_check').fetchone()[0]
+    snap = central.snapshot()
+    return {'server': 'ok', 'database': healthy, 'durable_path_configured': bool(os.environ.get('TRACKER_DATA_DIR')), 'devices': snap['devices'], 'sources': snap['sources'], 'ingestion': snap['ingestion'], 'sync_requests': snap['sync_requests'], 'projects': len(snap['projects'])}
 
 
 @route("GET", r"/api/analysis")
@@ -895,7 +971,7 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             return self._json(400, {"error": "bad request"})
-        if length < 0 or length > MAX_BODY:
+        if length < 0 or length > (5_000_000 if path.startswith('/api/collector/') else MAX_BODY):
             return self._json(413, {"error": "request too large"})
         raw = self.rfile.read(length) if length else b""
         # 4. Login gate for the phone listener.
@@ -907,6 +983,27 @@ class Handler(BaseHTTPRequestHandler):
             return self._login(body if isinstance(body, dict) else {})
         if path == "/api/logout" and method == "POST":
             return self._logout()
+        if path.startswith('/api/collector/'):
+            if method != 'POST' or path not in ('/api/collector/heartbeat', '/api/collector/projects'):
+                return self._json(404, {'error': 'Collector endpoint not implemented'})
+            auth = self.headers.get('Authorization', '')
+            device = central.authenticate(auth[7:] if auth.startswith('Bearer ') else '')
+            if not device:
+                central.log(None, 'rejected', 'Invalid or revoked collector credential')
+                return self._json(401, {'error': 'Invalid or revoked collector credential'})
+            try:
+                body = json.loads(raw or b'{}')
+                if not isinstance(body, dict):
+                    raise ValueError('Expected a JSON object')
+                result = central.heartbeat(device) if path.endswith('/heartbeat') else central.ingest(device, body)
+                return self._json(200, result)
+            except ValueError:
+                central.log(device, 'rejected', 'Malformed metadata: check schema, counts and timestamps')
+                return self._json(400, {'error': 'Malformed metadata: check schema, counts and timestamps'})
+            except Exception:
+                central.log(device, 'failed', 'Database ingestion failed')
+                log_error()
+                return self._json(500, {'error': 'Database ingestion failed'})
         if path == "/api/mirror" and method == "POST":
             return self._mirror(raw)
         if not self._authed() and path not in PUBLIC_PATHS:
@@ -1052,6 +1149,9 @@ MIRROR_IMAGE_EXTS = (".png", ".webp", ".jpg", ".jpeg")
 
 def apply_mirror(body: dict) -> dict:
     """Replace this instance's data with the snapshot pushed from the owner's PC."""
+    with db.conn() as c:
+        if c.execute('SELECT COUNT(*) FROM devices').fetchone()[0]:
+            raise ValueError('Whole-database mirroring is disabled once collectors are registered. Use incremental collectors to preserve all devices and owner edits.')
     blob = base64.b64decode(str(body.get("db") or ""), validate=True)
     if not blob.startswith(b"SQLite format 3\x00"):
         raise ValueError("Not a SQLite database")

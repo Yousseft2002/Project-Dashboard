@@ -1,0 +1,8 @@
+{
+  "server": "https://project-dashboard-0d02.onrender.com",
+  "workspaces": ["C:\\Users\\YOUR_USER\\Documents\\Projects"],
+  "sync_seconds": 300,
+  "max_depth": 5,
+  "ai_metadata": true,
+  "ignore": []
+}

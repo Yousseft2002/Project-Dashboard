@@ -9,12 +9,15 @@ import { physicalView, physicalDetail, physicalDialog } from "./views/physical.j
 import { ytView } from "./views/yt.js";
 import { historyView } from "./views/planner.js";
 import { settingsActions, machineLabel } from "./views/settings.js";
+import { integrationsView, debugView } from './views/integrations.js';
 
 const $app = document.getElementById("app");
 
 // ------------------------------------------------------------------ routing
 
 const ROUTES = [
+  [/^#\/integrations$/, () => integrationsView(), 'dashboard'],
+  [/^#\/debug$/, () => debugView(), 'dashboard'],
   [/^#\/project\/(.+)$/, (m) => projectView(decodeURIComponent(m[1])), "dashboard"],
   [/^#\/digital\/(.+)$/, (m) => { location.replace("#/project/" + m[1]); return ""; }, "dashboard"],
   [/^#\/physical\/(\d+)$/, (m) => physicalDetail(+m[1]), "physical"],
@@ -168,6 +171,20 @@ async function startPlannerJob(url, body) {
 
 const ACTIONS = {
   ...settingsActions,
+  async centralSync() {
+    const status = document.getElementById('centralSyncStatus');
+    if (status) status.textContent = 'Syncing… requesting collector updates';
+    const r = await api('POST', '/api/integrations/sync');
+    toast(r.message); await load();
+  },
+  async registerCollector(el) {
+    const r = await api('POST', '/api/integrations/devices', {device_id: el.elements.device.value});
+    document.getElementById('collectorCredential').innerHTML = `<p>Device: ${esc(r.device_id)}</p><p>Copy this token now. It will not be shown again.</p><input type="password" readonly aria-label="Collector token" value="${esc(r.token)}"><button type="button" class="btn" data-act="revealCollectorToken">Show token</button>`;
+  },
+  revealCollectorToken(el) { const input=el.parentElement.querySelector('input'); input.type=input.type==='password'?'text':'password'; },
+  async revokeCollector(el) { await api('POST','/api/integrations/revoke',{device_id:el.dataset.device}); await load(); toast('Collector token revoked'); },
+  filterCentralActivity(el) { state.ui.centralSource=el.value; render(); },
+  async humanInstruction(el) { await api('POST','/api/integrations/instruction',{project_id:el.elements.project.value,text:el.elements.text.value}); await load(); toast('Human instruction saved; priorities updated'); },
   // dashboard filters
   setUi(el) { state.ui[el.dataset.k] = el.dataset.v; saveUi(); render(); },
   setUiSelect(el) { state.ui[el.dataset.k] = el.value; saveUi(); render(); },
