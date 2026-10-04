@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import subprocess
 import mimetypes
@@ -33,6 +34,7 @@ SNAPSHOTS = DATA / "snapshots"
 
 db = DB(DATA / "tracker.db")
 central = CentralStore(db)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s %(message)s')
 _ctx = threading.local()
 
 
@@ -529,6 +531,11 @@ def api_register_device(body, **_):
     return central.register(body.get('device_id'))
 
 
+@route('POST', r'/api/integrations/pair/approve')
+def api_pair_approve(body, **_):
+    return central.pairing_approve(body.get('code'))
+
+
 @route('POST', r'/api/integrations/revoke')
 def api_revoke_device(body, **_):
     with db.conn() as c:
@@ -964,8 +971,8 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if origin and urlsplit(origin).netloc.lower() != host:
             return self._json(403, {"error": "forbidden origin"})
-        if path == "/health" and method == "GET":
-            return self._json(200, {"status": "ok"})
+        if path in ('/health','/api/health') and method == 'GET':
+            return self._json(200, {'status':'ok','service':'project-planner','collector_api_version':2,'collector_endpoints':['register','heartbeat','projects','status']})
         # 3. Read a bounded body.
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -984,18 +991,48 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/logout" and method == "POST":
             return self._logout()
         if path.startswith('/api/collector/'):
-            if method != 'POST' or path not in ('/api/collector/heartbeat', '/api/collector/projects'):
+            if path in ('/api/collector/pair/start','/api/collector/pair/claim') and method=='POST':
+                try:
+                    body=json.loads(raw or b'{}')
+                    if not isinstance(body,dict): raise ValueError()
+                    if path.endswith('/start'):
+                        # Bound requests per client; no browser credential is used by collectors.
+                        if security.throttle_wait(self.client_address[0]):
+                            return self._json(429,{'error':'Try pairing again later'})
+                        return self._json(200,central.pairing_start(body))
+                    auth=self.headers.get('Authorization','')
+                    return self._json(200,central.pairing_claim(auth[7:] if auth.startswith('Bearer ') else ''))
+                except ValueError:
+                    return self._json(400,{'error':'Pairing request invalid, expired or at capacity'})
+                except Exception:
+                    log_error()
+                    return self._json(500,{'error':'Pairing database operation failed'})
+            if (method,path) not in (('POST','/api/collector/register'),('POST','/api/collector/heartbeat'),('POST','/api/collector/projects'),('GET','/api/collector/status')):
                 return self._json(404, {'error': 'Collector endpoint not implemented'})
             auth = self.headers.get('Authorization', '')
             device = central.authenticate(auth[7:] if auth.startswith('Bearer ') else '')
             if not device:
-                central.log(None, 'rejected', 'Invalid or revoked collector credential')
+                token=auth[7:] if auth.startswith('Bearer ') else ''
+                # Attribute revoked credentials by their stored hash, never by a claimed device name.
+                import hashlib
+                with db.conn() as c:
+                    known=c.execute('SELECT id FROM devices WHERE token_hash=?',(hashlib.sha256(token.encode()).hexdigest(),)).fetchone() if token and len(token)<=200 else None
+                central.log(known['id'] if known else None, 'rejected', '401 — Collector authentication failed')
                 return self._json(401, {'error': 'Invalid or revoked collector credential'})
             try:
                 body = json.loads(raw or b'{}')
                 if not isinstance(body, dict):
                     raise ValueError('Expected a JSON object')
-                result = central.heartbeat(device) if path.endswith('/heartbeat') else central.ingest(device, body)
+                if body.get('device_id') and body['device_id'] != device:
+                    raise ValueError('Configured device ID does not match the collector token')
+                if path.endswith('/register'):
+                    result=central.register_collector(device,body)
+                elif path.endswith('/status'):
+                    result=central.collector_status(device)
+                elif path.endswith('/heartbeat'):
+                    result=central.heartbeat(device)
+                else:
+                    result=central.ingest(device,body)
                 return self._json(200, result)
             except ValueError:
                 central.log(device, 'rejected', 'Malformed metadata: check schema, counts and timestamps')

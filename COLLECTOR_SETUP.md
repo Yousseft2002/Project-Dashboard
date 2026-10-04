@@ -1,45 +1,53 @@
-# Connect your Windows computers
+# Connect a Windows computer to production
 
-This implementation establishes the incremental collector pipeline and local Claude/Codex timestamp adapters. It does not deploy itself or install a background service on your computers.
-
-## Server deployment
-
-Deploy this repository revision to your Render service. Keep `APP_ENV=production`, `APP_PASSWORD` and the expected public hostname configured. The checked-in free Blueprint still has ephemeral storage. For durable SQLite, attach a Render persistent disk and set `TRACKER_DATA_DIR` to its mount path (for example `/var/data/project-tracker`). This setting relocates the database, scan snapshots, previews, session state and logs together. Merely setting the variable without attaching persistent storage does **not** make storage durable. Back up the old database before changing its location. A PostgreSQL backend is not implemented in this phase.
-
-Log in at your site, open **Settings → Integrations** from the dashboard, and register `YousseF-Desktop`. Copy the token shown once. Register the laptop with a separate ID. Tokens are stored hashed in the database, can be rotated by registering the same ID again, and can be revoked. Collector tokens authorize only heartbeat and metadata ingestion; they cannot read dashboard/debug data or change owner settings.
-
-## On each computer
-
-Install Python 3.11 or newer and Git. Copy this repository to the computer. Copy `collector.config.example.json` to `collector.config.json`, set `workspaces` to the folders you actually use, and keep the deployed HTTPS origin as `server`. Workspaces are scanned up to `max_depth`; nested packages inside an already recognized project are not separate cards. Missing configured folders are reported as source errors.
-
-Use PowerShell to set `COLLECTOR_TOKEN` without typing it into shell history:
+From an up-to-date clone of this repository, run:
 
 ```powershell
-$collectorSecret = Read-Host 'Collector token' -AsSecureString
-$env:COLLECTOR_TOKEN = [System.Net.NetworkCredential]::new('', $collectorSecret).Password
-python collector.py --config collector.config.json --dry-run
-python collector.py --config collector.config.json --once
-python collector.py --config collector.config.json
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_collector.ps1
 ```
 
-If `python` is not on PATH on this desktop, use the installed executable at `C:\Users\Dell Desktop\AppData\Local\Python\pythoncore-3.14-64\python.exe` with PowerShell's `&` invocation operator.
+The wizard finds Python 3.11+ and Git, asks for the device name, defaults to `https://project-dashboard-0d02.onrender.com`, suggests existing development folders, and lets you select/remove/add roots. It does not scan the entire C: drive. Suggestions include common folders, VS Code recent-workspace metadata, and bounded recorded working directories; session activity is not collected.
 
-Dry run discovers metadata but prints only project counts, source statuses and warnings. It sends nothing. `--once` sends a heartbeat and one metadata batch. Continuous mode sends a heartbeat every 30 seconds between scans and scans every five minutes by default. **Sync now** queues a request; the next collector heartbeat triggers a scan. The UI distinguishes requests pending on offline devices from completed ingestion. Previously ingested projects stay visible when devices disappear. Keep the collector process running; Task Scheduler/service installation is a separate step.
+Choose **P** for browser pairing. Open the signed-in production dashboard → Settings → Integrations and approve the exact 12-character code displayed on that computer. No browser password or collector token needs to be pasted into a terminal or chat. The token is generated on the computer; only its hash reaches the server during pairing. The approval expires after ten minutes. Alternatively, choose **T** and enter a device-specific token issued by the owner dashboard through a secure prompt.
 
-## Data and privacy
+The wizard then:
 
-The payload allowlist consists of project/device paths and names, sanitized remote identity, branch, change/file/TODO counts, language, activity timestamps, commit SHAs/timestamps and hashed session IDs/timestamps. No source-file bodies, README bodies, commit messages, prompts, tool calls, environment values, credential stores or session contents are transmitted. Paths identify projects and can reveal folder names. Default ignores cover credentials, `.env*`, dependencies, build/cache directories and system/browser folders. Add your own `ignore` patterns. Symlink/junction directories are skipped.
+1. Checks the JSON health/API version, registers the collector, writes a heartbeat and reads it back from the production database.
+2. Stops for you to verify the device is online on the dashboard.
+3. Asks for one real Git repository with at least one commit; uploads it and reads back its latest commit SHA.
+4. Stops for you to verify the project and commit are visible after page refresh.
+5. Syncs the approved workspace folders and runs continuously in that window. Ctrl+C stops it. Use `-NoRun` to finish after setup/first sync.
 
-Local session adapters first check that `.claude/projects` and `.codex/sessions` actually exist. This desktop has both locations and usable JSONL metadata records. Their formats are best effort, not a guaranteed API. Match by recorded working directory against recognized workspace paths. Only the source, hashed ID and most recent valid timestamp leave the machine. Missing roots are unavailable, not zero sessions. Set `ai_metadata` to `false` to disable, or configure `session_roots` with explicit `claude`/`codex` paths. Processing is capped at 500 files per tool, 20 MB per file and 100 matched sessions per project; this is recent metadata, not a complete historical archive. Task summaries, outcomes, file edits and session duration remain unavailable.
+Repeat independently on the laptop and desktop. Never copy a token/protected-token file or installation ID from one computer to another. Repository remote identities merge clones into one project with separate device observations.
 
-VS Code activity is inferred from file modifications; the collector does not claim the editor was open. GitHub API and Render deployment connectors remain **not configured/not implemented**, rather than claiming connection based on a URL. The next phase should add environment-configured remote adapters with independent error isolation.
+## Configuration and credentials
 
-## Troubleshooting
+Non-secret settings are in `collector.config.json` beside the script; diagnostics are in `collector.config.state.json`. Tokens are encrypted with Windows DPAPI in `collector.token.dpapi`, readable only by the same Windows user on that computer. These files are ignored by Git. Tokens are never printed by the collector. `COLLECTOR_TOKEN` remains available for environment-based configuration and overrides the protected file. DPAPI operations require a normal loaded Windows user profile; impersonated/sandbox service profiles can fail.
 
-Open **Owner diagnostics** or `/api/debug` after logging in. Check last heartbeats, source status, ingestion acceptance/rejection and pending sync requests. HTTP 401 usually means a revoked/incorrect collector token; 400 means schema/timestamp validation failed; a collector network failure means no request reached the server. Check the configured HTTPS origin and workspace roots. Detailed rejection logs intentionally omit raw request values and credentials.
+`PROJECT_PLANNER_URL` overrides the configured server. Production requires HTTPS and rejects localhost, private/unspecified addresses and ports 8765/8766. Local testing requires **both** a loopback URL and `--local-development` (`-LocalDevelopment` for the wizard). TLS certificate checks remain enabled; redirects never forward credentials.
 
-Existing whole-database cloud mirroring is refused once collectors are registered so a push cannot wipe central records. Existing owner tasks/analyses are carried from repository-matched snapshots into the central project key. The server persists accepted batches atomically and does not delete missing projects.
+Heartbeats run independently every 60 seconds, including during scans. Workspace scans run every 300 seconds. Server-side Sync now requests are picked up on the next heartbeat. Keep the collector window running; unattended startup/Task Scheduler installation is not part of setup.
 
-## Validation
+## Commands
 
-`python -m unittest discover -s tests -v` covers repository identity normalization, two devices, retry deduplication, DB reopening, source-body exclusion, authentication rotation, identity upgrades, authenticated HTTP ingestion, owner-only diagnostics and queued synchronization. The first **production** device connection remains pending deployment, persistent storage configuration and a token generated on that server. Do not claim the public dashboard is updated until those steps are verified.
+```powershell
+python collector.py test --heartbeat-only
+python collector.py test --project "C:\path\to\one\git-repository"
+python collector.py status
+python collector.py --once
+python collector.py
+```
+
+`--test` is an alias for `test`; `--config` supports a different non-secret JSON configuration. Full workspace ingestion is blocked until one-project verification succeeds for the current server/device/installation. `status` reads live device-scoped API data and non-secret local diagnostics. A returned HTML/login webpage, missing API, rejected token or failed database read-back is an error, never a successful connection.
+
+Commit/activity metadata travels in the project batch. No `/api/collector/activity` call is made. The public health endpoint is `/api/health` (also `/health`); collector endpoints are `/api/collector/register`, `/api/collector/heartbeat`, `/api/collector/projects`, `/api/collector/status`, and pairing start/claim. Owner authentication is separate and required for pairing approval and owner debug/dashboard access.
+
+Only metadata leaves the computer: project names/paths, sanitized remote identities, branches, commit SHAs/timestamps, counts and file-modification timestamps. Source bodies, prompts, README content, commit messages, credentials and environment values are not uploaded. Default ignores exclude sensitive/dependency/build/cache/system directories. Add custom `ignore` patterns. Claude/Codex/editor session collection is paused until basic device syncing passes acceptance.
+
+## Production persistence
+
+The currently observed Render Free service has no persistent disk. Page-refresh persistence can be verified, but SQLite and registered token hashes are not durable across instance replacement/redeploy. To meet restart persistence, attach a persistent disk on paid compute and set `TRACKER_DATA_DIR` to its mount directory (for example `/var/data/project-tracker`). Relocating the path without attaching durable storage does not solve persistence. Keep the environment password and hostname settings. An existing external database requires a separate storage implementation; PostgreSQL is not implemented here.
+
+Settings → Integrations shows heartbeats, last sync, last attempt and server-observed errors. Client-side network/DNS failures cannot reach the server; `collector.py status` and the local state file show these errors. Unknown invalid tokens are unattributed. Known revoked tokens can be attributed by their hash.
+
+See [the collector audit](COLLECTOR_AUDIT.md) for original behavior and actual production probe results. Production acceptance evidence is tracked in `PRODUCTION_SYNC_PROOF.md`; automated tests or simulated devices do not establish that the laptop connected or that Render storage survived a restart.

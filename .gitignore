@@ -9,3 +9,6 @@ static/Python/
 *.sqlite
 *.sqlite3
 collector.config.json
+collector*.state.json
+collector.token.dpapi
+*.collector-token.dpapi
