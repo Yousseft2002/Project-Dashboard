@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import mimetypes
+import sqlite3
 import re
 import shutil
 import socket
@@ -519,7 +520,10 @@ def settings_payload() -> dict:
     return {"model": db.get_setting("model", "sonnet"), "models": analyzer.MODELS,
             "claude_found": bool(analyzer.find_claude()), "local_machine": LOCAL_MACHINE,
             "sync_dir": "" if is_remote() else (str(sd) if sd else ""), "sync_ok": bool(sd and sd.is_dir()),
-            "kit_ready": bool(sd and (sd / "ytpc-kit" / "install.py").exists())}
+            "kit_ready": bool(sd and (sd / "ytpc-kit" / "install.py").exists()),
+            "cloud_url": "" if is_remote() or is_cloud() else db.get_setting("cloud_url", ""),
+            "cloud_set": bool(db.get_setting("cloud_password", "")),
+            "cloud_pushed": db.get_setting("cloud_pushed", "")}
 
 
 @route("POST", r"/api/settings")
@@ -735,7 +739,7 @@ def api_delete_milestone(body, mid):
 
 MAX_BODY = 20_000_000
 PUBLIC_PATHS = {"/login", "/login.js", "/login.css"}
-LOCAL_ONLY = re.compile(r"^/api/(access(/|$)|sync/|project/open$|settings$)")   # touch the PC itself, never from a phone
+LOCAL_ONLY = re.compile(r"^/api/(access(/|$)|sync/|project/open$|settings$|cloud/)")   # touch the PC itself, never from a phone
 ROOT_FILES = {".html", ".js", ".css", ".svg", ".png", ".ico", ".webp"}
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
        "connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
@@ -847,6 +851,25 @@ class Handler(BaseHTTPRequestHandler):
             "; Secure" if self.server.tls or self.server.cloud else "")
         self._json(200, {"ok": True}, [("Set-Cookie", gone)])
 
+    def _mirror(self, raw: bytes):
+        """Receive a data snapshot pushed from the owner's PC (cloud mode only)."""
+        if not self.server.cloud:
+            return self._json(404, {"error": "not found"})
+        auth = self.headers.get("Authorization") or ""
+        token = auth[7:] if auth.startswith("Bearer ") else ""
+        if not token or not security.try_password(self.client_address[0], token[:256], os.environ["APP_PASSWORD"]):
+            return self._json(401, {"error": "bad credentials"})
+        try:
+            body = json.loads(raw or b"{}")
+            if not isinstance(body, dict):
+                raise ValueError("Expected a JSON object")
+            return self._json(200, apply_mirror(body))
+        except ValueError as e:
+            return self._json(400, {"error": str(e)})
+        except Exception:
+            log_error()
+            return self._json(500, {"error": "Something went wrong. Details are in data/server.log."})
+
     def _dispatch(self, method: str):
         srv = self.server
         _ctx.remote = srv.remote
@@ -884,6 +907,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._login(body if isinstance(body, dict) else {})
         if path == "/api/logout" and method == "POST":
             return self._logout()
+        if path == "/api/mirror" and method == "POST":
+            return self._mirror(raw)
         if not self._authed() and path not in PUBLIC_PATHS:
             if api_call:
                 return self._json(401, {"error": "login required"})
@@ -1017,6 +1042,97 @@ def api_access_code(body, **_):
 def api_access_revoke(body, **_):
     security.revoke_all()
     return access_payload()
+
+
+# ------------------------------------------------------------------ cloud mirror
+
+MIRROR_NAME = re.compile(r"^[\w][\w.-]{0,119}$")
+MIRROR_IMAGE_EXTS = (".png", ".webp", ".jpg", ".jpeg")
+
+
+def apply_mirror(body: dict) -> dict:
+    """Replace this instance's data with the snapshot pushed from the owner's PC."""
+    blob = base64.b64decode(str(body.get("db") or ""), validate=True)
+    if not blob.startswith(b"SQLite format 3\x00"):
+        raise ValueError("Not a SQLite database")
+    snaps = body.get("snapshots") or {}
+    prevs = body.get("previews") or {}
+    if not isinstance(snaps, dict) or not isinstance(prevs, dict):
+        raise ValueError("Bad snapshot payload")
+    for name in list(snaps) + list(prevs):
+        if not isinstance(name, str) or not MIRROR_NAME.match(name) or ".." in name:
+            raise ValueError("Bad file name")
+    tmp = DATA / "tracker.db.push"
+    tmp.write_bytes(blob)
+    try:
+        src = sqlite3.connect(tmp)
+        try:
+            dst = sqlite3.connect(db.path, timeout=30)
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+    finally:
+        tmp.unlink(missing_ok=True)
+    SNAPSHOTS.mkdir(parents=True, exist_ok=True)
+    for f in SNAPSHOTS.glob("*.json"):
+        f.unlink()
+    for name, content in snaps.items():
+        if not name.endswith(".json"):
+            raise ValueError("Snapshots must be .json")
+        (SNAPSHOTS / name).write_text(json.dumps(content), encoding="utf-8")
+    previews.PREVIEWS.mkdir(parents=True, exist_ok=True)
+    for name, b64 in prevs.items():
+        if Path(name).suffix.lower() not in MIRROR_IMAGE_EXTS:
+            raise ValueError("Previews must be images")
+        (previews.PREVIEWS / name).write_bytes(base64.b64decode(str(b64), validate=True))
+    for f in previews.PREVIEWS.iterdir():
+        if f.is_file() and f.name not in prevs:
+            f.unlink()
+    stamp = {"pushed_at": datetime.now(timezone.utc).isoformat(), "machine": str(body.get("machine") or "")[:80]}
+    (DATA / "mirror.json").write_text(json.dumps(stamp), encoding="utf-8")
+    return {"ok": True, **stamp}
+
+
+@route("POST", r"/api/cloud/push")
+def api_cloud_push(body, **_):
+    """Send a snapshot of this PC's data to the cloud mirror site."""
+    import urllib.error
+    import urllib.request
+    url = (str(body.get("url") or "") or db.get_setting("cloud_url", "")).strip().rstrip("/")
+    password = str(body.get("password") or "") or db.get_setting("cloud_password", "")
+    if not url.startswith(("http://", "https://")):
+        raise ValueError("Enter the cloud site address (https://...)")
+    if len(password) < 16:
+        raise ValueError("Enter the deployment password (at least 16 characters)")
+    db.set_setting("cloud_url", url)
+    db.set_setting("cloud_password", password)
+    payload = {"machine": LOCAL_MACHINE,
+               "db": base64.b64encode(db.path.read_bytes()).decode(),
+               "snapshots": {f.name: json.loads(f.read_text(encoding="utf-8")) for f in SNAPSHOTS.glob("*.json")},
+               "previews": {f.name: base64.b64encode(f.read_bytes()).decode() for f in previews.PREVIEWS.iterdir()
+                            if f.is_file() and f.suffix.lower() in MIRROR_IMAGE_EXTS
+                            and f.stat().st_size <= 2_000_000}}
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(url + "/api/mirror", data=data, method="POST",
+                                 headers={"Content-Type": "application/json",
+                                          "Authorization": "Bearer " + password})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as res:
+            json.loads(res.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.loads(e.read() or b"{}").get("error") or f"HTTP {e.code}"
+        except ValueError:
+            msg = f"HTTP {e.code}"
+        raise ValueError(f"The cloud site refused the push: {msg}")
+    except (TimeoutError, OSError) as e:
+        raise ValueError(f"Couldn't reach the cloud site: {getattr(e, 'reason', e)}")
+    stamp = datetime.now(timezone.utc).isoformat()
+    db.set_setting("cloud_pushed", stamp)
+    return {"ok": True, "pushed_at": stamp, "bytes": len(data)}
 
 
 def serve(port: int = 8765, *, host: str = "127.0.0.1", production: bool = False,

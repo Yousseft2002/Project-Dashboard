@@ -52,6 +52,21 @@ function phoneSection() {
   </section>`;
 }
 
+function cloudSection() {
+  const s = state.data.settings;
+  return `<section><h3>Cloud mirror</h3>
+    <p class="muted">Copy this PC's data to your cloud site so you can see your projects from anywhere. The cloud copy is a snapshot: push again after working here.</p>
+    <label class="field">Cloud site address
+      <input id="cloudUrl" type="url" placeholder="https://your-site.onrender.com" value="${esc(s.cloud_url || "")}"></label>
+    <label class="field">Deployment password
+      <input id="cloudPw" type="password" autocomplete="off" placeholder="${s.cloud_set ? "(saved on this PC)" : "APP_PASSWORD from Render"}"></label>
+    <div class="row-actions">
+      <button type="button" class="btn primary" data-act="pushCloud">Push data to cloud</button>
+      ${s.cloud_pushed ? `<span class="muted small">Last pushed ${ago(s.cloud_pushed)}</span>` : ""}
+    </div>
+  </section>`;
+}
+
 function body() {
   const s = state.data.settings;
   if (state.data.access?.remote) {
@@ -64,6 +79,7 @@ function body() {
   return `<div class="form settings">
     <div class="dlg-head"><h2>${icon("cpu", 20)}Computers & sync</h2><button class="icon-x always" value="close" aria-label="Close">${icon("x", 16)}</button></div>
     ${phoneSection()}
+    ${cloudSection()}
     <section><h3>Computers</h3>${machinesTable()}</section>
     <section><h3>Home PC (YTPC) setup</h3>
       ${others.length ? `<p class="ok-line">${icon("checkCircle", 15)}Receiving snapshots from ${others.map((m) => esc(m.machine)).join(", ")}.</p>` : ""}
@@ -106,6 +122,17 @@ export const settingsActions = {
     Object.assign(state.data.settings, r);
     refresh();
     toast("Setup kit saved to " + r.path);
+  },
+  async pushCloud() {
+    const url = dlg.querySelector("#cloudUrl").value.trim();
+    const pw = dlg.querySelector("#cloudPw").value;
+    toast("Pushing data to the cloud site… this can take a minute if it was asleep.");
+    try {
+      const r = await api("POST", "/api/cloud/push", { url, password: pw || undefined });
+      Object.assign(state.data.settings, { cloud_url: url, cloud_set: true, cloud_pushed: r.pushed_at });
+      refresh();
+      toast("Done. The cloud site now shows this PC's projects.");
+    } catch (e) { toast(e.message); }
   },
   async togglePhone() {
     try { phone = await api("POST", "/api/access", { enabled: !(phone.enabled && phone.running) }); }

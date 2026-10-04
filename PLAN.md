@@ -108,3 +108,14 @@ Each phase stops for your "go" before the next one starts.
   warn about the self-signed cert (compare the fingerprint in Settings); Windows may prompt to allow Python on
   Private networks; HEAD requests return 501.
 - **Files:** `tracker/security.py`, `tracker/server.py`, `static/login.*`, `static/access.css`.
+
+## Cloud mirror (built 2026-10-04)
+- The Render site (project-dashboard-*.onrender.com) runs the same app in cloud mode: deployment-password login,
+  scanning/AI/previews disabled, empty until data arrives.
+- **Settings > Cloud mirror** on the PC pushes a snapshot (database + scan snapshots + preview images, ~2.4 MB) to
+  the cloud site over HTTPS, authenticated with the deployment password. One way: cloud-side edits are overwritten
+  by the next push and Render's free tier wipes its disk when the service restarts or sleeps, so push again whenever
+  the cloud looks empty or stale.
+- Endpoints: `POST /api/cloud/push` (PC-only) -> `POST /api/mirror` on the cloud (Bearer password, throttled,
+  validates the SQLite header and file names; SQLite online backup so a push works while the site is being used).
+- The deployment password is saved in the PC's database so pushing is one click; treat `data/` as private.
