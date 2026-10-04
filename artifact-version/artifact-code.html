@@ -46,6 +46,7 @@ const PRIORITIES = ["High","Medium","Low"];
 const TYPES = ["App","Website","SaaS","Internal Tool","E-commerce","Automation","Game","Library","Other"];
 const COLORS = ["#6e98d4","#e27a4b","#42a58a","#c9983e","#ba759a","#63a58a","#8174c5","#d26c6c"];
 const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = (v) => /^https?:\/\//i.test(String(v || "")) ? String(v) : "";
 const id = () => "u-" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const today = () => new Date().toISOString().slice(0,10);
 const fmt = (n) => Number(n || 0).toLocaleString();
@@ -104,7 +105,7 @@ function projectStats(){
 function sortProjects(ps){
   const u=state.ui,q=(u.q||"").trim().toLowerCase();
   const sorts={updated:(a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||""),progress:(a,b)=>b.progress-a.progress,priority:(a,b)=>PRIORITIES.indexOf(a.priority)-PRIORITIES.indexOf(b.priority),health:(a,b)=>(b.health??-1)-(a.health??-1),phase:(a,b)=>PHASES.indexOf(b.phase)-PHASES.indexOf(a.phase),name:(a,b)=>a.name.localeCompare(b.name)};
-  return ps.filter(p=>u.status==="all"||(u.status==="close"?p.status!=="Completed"&&p.progress>=75:p.status===u.status))
+  return ps.filter(p=>u.status==="all"||(u.status==="active"?p.status==="Active"||p.status==="Blocked":u.status==="close"?p.status!=="Completed"&&p.progress>=75:p.status===u.status))
     .filter(p=>u.type==="all"||p.type===u.type)
     .filter(p=>!q||[p.name,p.oneLiner,p.type,p.phase,...(p.technologies||[])].join(" ").toLowerCase().includes(q))
     .slice().sort(sorts[u.sort]||sorts.updated);
@@ -118,7 +119,8 @@ function nextUp(n=6){
     });
   });
   rows.sort((a,b)=>b.score-a.score);
-  const used={};return rows.filter(x=>(used[x.p.id]=(used[x.p.id]||0)+1)<=2).slice(0,n);
+  const used={};const picked=rows.filter(x=>(used[x.p.id]=(used[x.p.id]||0)+1)<=2).slice(0,n);
+  return [...picked,...state.planTasks.filter(t=>t.status!=="done").slice(0,Math.max(0,n-picked.length)).map(t=>({p:{id:"inbox",name:"Personal list"},t,score:0}))];
 }
 function pill(text,cls=""){return `<span class="chip ${cls}">${esc(text)}</span>`}
 function projectCard(p){
@@ -151,7 +153,7 @@ function dashboard(){
   <section class="hero card" aria-label="Portfolio overview"><div class="hero-grid">
     <div class="hero-ring">${ring(s.overall,170,"var(--accent)","portfolio")}<div class="hero-ring-foot"><span>◉ Avg health <b>${ps.length?Math.round(ps.reduce((a,p)=>a+(p.health||0),0)/ps.length):"–"}</b></span></div></div>
     <div class="hero-tiles">
-      ${tile("Active projects",s.active,"all")} ${tile("In development",s.inDevelopment,"all")} ${tile("Almost done",s.close,"close")} ${tile("Blocked",s.blocked,"Blocked")}
+      ${tile("Active projects",s.active,"active")} ${tile("In development",s.inDevelopment,"all")} ${tile("Almost done",s.close,"close")} ${tile("Blocked",s.blocked,"Blocked")}
       ${tile("Completed",s.completed,"Completed")} ${tile("Open tasks",s.openTasks)} ${tile("Tasks done",s.doneTasks)} ${tile("High-priority tasks",s.highTasks)}
     </div><div class="hero-donut"><h3>Project status</h3><div class="legend vertical">${STATUSES.map(st=>`<li><i class="sw" style="background:${statusColors[st]}"></i>${st}<b>${s.statusCounts[st]}</b></li>`).join("")}</div></div>
   </div><div class="hero-lower"><div><h3>Lifecycle stage</h3><div class="cols">${phaseHtml}</div></div>
@@ -166,7 +168,7 @@ function dashboard(){
   </div>
   <section class="section" id="projects"><div class="section-title"><h2>▦ Digital projects <span class="count">${show.length}</span></h2><button class="btn primary" data-action="new-project">＋ Add project</button></div>
     <div class="toolbar"><input class="search" data-action="search" type="search" placeholder="Search projects, tech, phase…" value="${esc(state.ui.q)}" aria-label="Search projects">
-      <div class="seg">${["all","Active","Blocked","close","Paused","Completed"].map(k=>`<button class="${state.ui.status===k?"on":""}" data-action="filter-status" data-value="${k}">${k==="all"?"All":k==="close"?"Almost done":k}<span>${k==="all"?ps.length:k==="close"?s.close:ps.filter(p=>p.status===k).length}</span></button>`).join("")}</div>
+      <div class="seg">${["all","active","Blocked","close","Paused","Completed"].map(k=>`<button class="${state.ui.status===k?"on":""}" data-action="filter-status" data-value="${k}">${k==="all"?"All":k==="active"?"Active":k==="close"?"Almost done":k}<span>${k==="all"?ps.length:k==="active"?s.active:k==="close"?s.close:ps.filter(p=>p.status===k).length}</span></button>`).join("")}</div>
       <select data-action="filter-type" aria-label="Filter by type"><option value="all">All types</option>${[...new Set(ps.map(p=>p.type))].map(t=>`<option ${state.ui.type===t?"selected":""}>${esc(t)}</option>`).join("")}</select>
       <select data-action="sort"><option value="updated" ${state.ui.sort==="updated"?"selected":""}>Sort: Recently updated</option><option value="progress" ${state.ui.sort==="progress"?"selected":""}>Sort: Progress</option><option value="priority" ${state.ui.sort==="priority"?"selected":""}>Sort: Priority</option><option value="health" ${state.ui.sort==="health"?"selected":""}>Sort: Health</option><option value="phase" ${state.ui.sort==="phase"?"selected":""}>Sort: Lifecycle stage</option><option value="name" ${state.ui.sort==="name"?"selected":""}>Sort: Name</option></select>
       <div class="seg"><button class="${state.ui.view==="grid"?"on":""}" data-action="view" data-value="grid" aria-label="Grid view">▦</button><button class="${state.ui.view==="list"?"on":""}" data-action="view" data-value="list" aria-label="List view">☷</button></div></div>
@@ -189,9 +191,9 @@ function projectDetail(p){
   if(!p)return `<a href="#/">← Dashboard</a><div class="empty">Project not found.</div>`;
   const color=COLORS[Math.abs(p.name.split("").reduce((a,c)=>a+c.charCodeAt(0),0))%COLORS.length];
   const groups=[["doing","In progress"],["todo","Up next"],["done","Completed"]];
-  return `<a href="#/" class="small">← Dashboard</a><section class="card panel detail-section"><div class="detail-head">${ring(p.progress,142,color,"complete")}<div><div class="pc-badges">${pill(p.type)}${pill(p.status,"status")}${pill(p.priority+" priority",p.priority==="High"?"high":"")}</div><h1>${esc(p.name)}</h1><p class="muted">${esc(p.oneLiner||"No description yet.")}</p><div class="detail-actions"><button class="btn primary" data-action="edit-project" data-id="${esc(p.id)}">✎ Edit details</button><button class="btn" data-action="delete-project" data-id="${esc(p.id)}">Hide / remove</button>${p.githubUrl?`<a class="btn" href="${esc(p.githubUrl)}" target="_blank" rel="noopener">GitHub ↗</a>`:""}</div></div></div>
+  return `<a href="#/" class="small">← Dashboard</a><section class="card panel detail-section"><div class="detail-head">${ring(p.progress,142,color,"complete")}<div><div class="pc-badges">${pill(p.type)}${pill(p.status,"status")}${pill(p.priority+" priority",p.priority==="High"?"high":"")}</div><h1>${esc(p.name)}</h1><p class="muted">${esc(p.oneLiner||"No description yet.")}</p><div class="detail-actions"><button class="btn primary" data-action="edit-project" data-id="${esc(p.id)}">✎ Edit details</button><button class="btn" data-action="delete-project" data-id="${esc(p.id)}">Hide / remove</button>${safeUrl(p.githubUrl)?`<a class="btn" href="${safeUrl(p.githubUrl)}" target="_blank" rel="noopener noreferrer">GitHub ↗</a>`:""}</div></div></div>
     <div class="grid3 section"><div><small>Lifecycle stage</small><b>${esc(p.phase)}</b></div><div><small>Health</small><b>${p.health??"–"} / 100</b></div><div><small>Target</small><b>${p.targetDate?esc(p.targetDate):"Not set"}</b></div></div></section>
-  <nav class="section-nav">${["overview","tasks","milestones","issues"].map(x=>`<a href="#sec-${x}">${x[0].toUpperCase()+x.slice(1)}</a>`).join("")}</nav>
+  <nav class="section-nav">${["overview","tasks","milestones","issues"].map(x=>`<a href="#sec-${x}" data-section="sec-${x}">${x[0].toUpperCase()+x.slice(1)}</a>`).join("")}</nav>
   <section class="grid2 detail-section" id="sec-overview">${panel("Description",`<p>${esc(p.description||"No description yet.")}</p><h3 class="section">Technologies</h3><div class="pc-badges">${(p.technologies||[]).map(t=>pill(t)).join("")||"Unknown"}</div>`)}
   ${panel("Goals & important notes",`<form class="plan-add" data-form="add-goal" data-project="${esc(p.id)}"><input name="title" placeholder="Add a goal" required><button class="btn">＋ Add</button></form><ul class="timeline section">${(p.goals||[]).map((g,i)=>`<li><span class="grow">${esc(g)}</span><button class="btn small" data-action="remove-goal" data-project="${esc(p.id)}" data-index="${i}">×</button></li>`).join("")||`<li class="muted">No goals yet.</li>`}</ul><label class="field section">Notes<textarea data-action="notes" data-project="${esc(p.id)}" placeholder="Decisions, ideas, reminders…">${esc(p.notes||"")}</textarea><span class="small">Saved automatically when you leave the field.</span></label>`)}</section>
   <section id="sec-tasks" class="detail-section">${panel("Tasks",`<form class="plan-add" data-form="add-project-task" data-project="${esc(p.id)}"><input name="title" placeholder="Add a task…" required><select name="priority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select><button class="btn primary">＋ Add</button></form><div class="task-columns section">${groups.map(([st,label])=>{const items=p.tasks.filter(t=>t.status===st);return `<div class="task-col"><h3>${label}<span>${items.length}</span></h3>${items.map(t=>`<div class="task ${st==="done"?"done":""}"><button class="check" data-action="toggle-task" data-project="${esc(p.id)}" data-id="${esc(t.id)}">${st==="done"?"✓":"○"}</button><div class="task-text"><b>${esc(t.title)}</b>${t.detail?`<div class="task-meta">${esc(t.detail)}</div>`:""}<div class="task-meta">${esc(t.priority||"medium")} priority</div></div><button class="remove" data-action="delete-task" data-project="${esc(p.id)}" data-id="${esc(t.id)}" aria-label="Remove task">×</button></div>`).join("")||`<div class="empty">Nothing here</div>`}</div>`}).join("")}</div>`)}</section>
@@ -254,16 +256,33 @@ function setTheme(){
 function exportData(){
   const data={format:"project-tracker-artifact",version:1,exportedAt:new Date().toISOString(),projects:state.projects,physical:state.physical,analytics:state.analytics,theme:state.theme};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="project-tracker-artifact-data.json";a.click();URL.revokeObjectURL(a.href);showToast("JSON backup downloaded.");
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="project-tracker-artifact-data.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);showToast("JSON backup downloaded.");
 }
 function importData(file){
+  if(file.size>10_000_000){showToast("JSON file is larger than the 10 MB import limit.");return}
   const reader=new FileReader();
   reader.onload=()=>{
     try{
       const obj=JSON.parse(reader.result);
       if(!obj||!Array.isArray(obj.projects)||!Array.isArray(obj.physical))throw new Error("Expected projects and physical arrays.");
       if(obj.projects.length>500||obj.physical.length>500)throw new Error("Import is larger than the supported limit.");
-      state.projects=obj.projects;state.physical=obj.physical;state.analytics=obj.analytics||null;
+      const bounded=xs=>{if(xs.length>2000)throw new Error("An imported project has too many items.");return xs};
+      const importedProjects=obj.projects.map((raw,i)=>{
+        if(!raw||typeof raw!=="object"||!String(raw.name||"").trim())throw new Error(`Project ${i+1} needs a name.`);
+        const p={...raw,id:String(raw.id||id()).slice(0,150),name:String(raw.name).slice(0,100),oneLiner:String(raw.oneLiner||"").slice(0,300),description:String(raw.description||"").slice(0,10000),notes:String(raw.notes||"").slice(0,10000)};
+        p.status=STATUSES.includes(raw.status)?raw.status:"Active";p.phase=PHASES.includes(raw.phase)?raw.phase:"Idea";p.priority=PRIORITIES.includes(raw.priority)?raw.priority:"Medium";p.type=TYPES.includes(raw.type)?raw.type:"Other";
+        p.progress=Math.max(0,Math.min(100,Number(raw.progress)||0));p.health=raw.health==null?null:Math.max(0,Math.min(100,Number(raw.health)||0));p.targetDate=String(raw.targetDate||"").slice(0,10);p.githubUrl=safeUrl(raw.githubUrl);
+        p.technologies=bounded(Array.isArray(raw.technologies)?raw.technologies:[]).slice(0,100).map(x=>String(x).slice(0,100));
+        p.tasks=bounded(Array.isArray(raw.tasks)?raw.tasks:[]).map(t=>{if(!t||typeof t!=="object")throw new Error(`Project ${i+1} has an invalid task.`);return {id:String(t.id||id()).slice(0,150),title:String(t.title||"Untitled task").slice(0,300),detail:String(t.detail||"").slice(0,2000),status:["todo","doing","done"].includes(t.status)?t.status:"todo",priority:["high","medium","low"].includes(String(t.priority||"").toLowerCase())?String(t.priority).toLowerCase():"medium",source:"user",updatedAt:t.updatedAt||null}});
+        p.milestones=bounded(Array.isArray(raw.milestones)?raw.milestones:[]).map(m=>{if(!m||typeof m!=="object")throw new Error(`Project ${i+1} has an invalid milestone.`);return {id:String(m.id||id()).slice(0,150),title:String(m.title||"Untitled milestone").slice(0,300),due:String(m.due||"").slice(0,10),status:m.status==="done"?"done":"todo"}});
+        for(const k of ["blockers","bugs"])p[k]=bounded(Array.isArray(raw[k])?raw[k]:[]).map(x=>{if(!x||typeof x!=="object")throw new Error(`Project ${i+1} has an invalid issue.`);return {id:String(x.id||id()).slice(0,150),title:String(x.title||"Untitled issue").slice(0,300),detail:String(x.detail||"").slice(0,2000),priority:["high","medium","low"].includes(String(x.priority||"").toLowerCase())?String(x.priority).toLowerCase():"medium",status:["resolved","done"].includes(x.status)?"resolved":"open"}});
+        p.goals=bounded(Array.isArray(raw.goals)?raw.goals:[]).slice(0,200).map(x=>String(x).slice(0,500));return p;
+      });
+      const importedPhysical=obj.physical.map((raw,i)=>{
+        if(!raw||typeof raw!=="object"||!String(raw.name||"").trim())throw new Error(`Physical build ${i+1} needs a name.`);
+        return {...raw,id:String(raw.id||id()).slice(0,150),name:String(raw.name).slice(0,100),category:String(raw.category||"Other").slice(0,60),status:["planning","active","paused","done"].includes(raw.status)?raw.status:"planning",description:String(raw.description||"").slice(0,10000),budget:raw.budget==null?null:Math.max(0,Number(raw.budget)||0),color:Math.abs(Number(raw.color)||0)%8,target_date:String(raw.target_date||"").slice(0,10),milestones:bounded(Array.isArray(raw.milestones)?raw.milestones:[]).map(m=>{if(!m||typeof m!=="object")throw new Error(`Physical build ${i+1} has an invalid milestone.`);return {id:String(m.id||id()).slice(0,150),title:String(m.title||"Untitled milestone").slice(0,300),done:!!m.done}}),updates:bounded(Array.isArray(raw.updates)?raw.updates:[]).map(u=>{if(!u||typeof u!=="object")throw new Error(`Physical build ${i+1} has an invalid update.`);return {id:String(u.id||id()).slice(0,150),day:String(u.day||today()).slice(0,10),progress:u.progress==null?null:Math.max(0,Math.min(100,Number(u.progress)||0)),note:String(u.note||"").slice(0,2000),hours:Math.max(0,Number(u.hours)||0),cost:Math.max(0,Number(u.cost)||0)}})};
+      });
+      state.projects=importedProjects;state.physical=importedPhysical;state.analytics=null;
       state.theme=obj.theme==="dark"?"dark":"light";document.documentElement.dataset.theme=state.theme;persist();go("dashboard");showToast("JSON data imported.");
     }catch(e){showToast("Could not import JSON: "+e.message);}
   };
@@ -280,6 +299,7 @@ function editProjectForm(p){
     <label class="field">Name<input name="name" required maxlength="100" value="${esc(p.name)}"></label>
     <label class="field">One-line summary<input name="oneLiner" maxlength="180" value="${esc(p.oneLiner||"")}"></label>
     <label class="field">Description<textarea name="description">${esc(p.description||"")}</textarea></label>
+    <label class="field">GitHub URL<input name="githubUrl" type="url" placeholder="https://github.com/…" value="${esc(p.githubUrl||"")}"></label>
     <div class="form-grid"><label class="field">Type<select name="type">${TYPES.map(t=>`<option ${p.type===t?"selected":""}>${esc(t)}</option>`).join("")}</select></label><label class="field">Status<select name="status">${STATUSES.map(t=>`<option ${p.status===t?"selected":""}>${t}</option>`).join("")}</select></label>
     <label class="field">Lifecycle stage<select name="phase">${PHASES.map(t=>`<option ${p.phase===t?"selected":""}>${t}</option>`).join("")}</select></label><label class="field">Priority<select name="priority">${PRIORITIES.map(t=>`<option ${p.priority===t?"selected":""}>${t}</option>`).join("")}</select></label>
     <label class="field">Progress (%)<input name="progress" type="number" min="0" max="100" value="${Number(p.progress)||0}"></label><label class="field">Health (0–100)<input name="health" type="number" min="0" max="100" value="${p.health??""}"></label>
@@ -301,12 +321,17 @@ function handleClick(e){
   if(act==="new-build"){editBuildForm();return}
   if(act==="edit-build"){editBuildForm(buildFor(pid2));return}
   if(act==="open-project"){openProject(pid2);return}
+  if(act==="cycle-task"){
+    const p=projectFor(b.dataset.project),t=p?.tasks.find(x=>x.id===b.dataset.id);
+    if(t){t.status=t.status==="todo"?"doing":t.status==="doing"?"done":"todo";t.updatedAt=new Date().toISOString();persist();render()}return;
+  }
   if(act==="open-build"){openBuild(pid2);return}
   if(act==="back-physical"){state.physicalId=null;render();return}
   if(act==="filter-status"){state.ui.status=b.dataset.value;persist();render();return}
   if(act==="quick-filter"){state.ui.status=b.dataset.value;state.ui.type="all";state.ui.q="";render();document.getElementById("projects")?.scrollIntoView({behavior:"smooth"});return}
   if(act==="view"){state.ui.view=b.dataset.value;persist();render();return}
   if(act==="toggle-task"){
+    if(b.dataset.project==="inbox"){const t=state.planTasks.find(x=>x.id===b.dataset.id);if(t){t.status=t.status==="done"?"todo":"done";persist();render()}return}
     const p=projectFor(b.dataset.project),t=p?.tasks.find(x=>x.id===b.dataset.id);
     if(t){t.status=t.status==="done"?"todo":t.status==="doing"?"done":"done";t.updatedAt=new Date().toISOString();persist();render()}return;
   }
@@ -331,7 +356,7 @@ function handleSubmit(e){
   const data=values(form),kind=form.dataset.form,pid=form.dataset.project,p=projectFor(pid),bid=form.dataset.id,b=buildFor(bid);
   if(kind==="save-project"){
     const existing=projectFor(form.dataset.id);
-    const item={...(existing||{id:id(),createdAt:today(),tasks:[],milestones:[],blockers:[],bugs:[],goals:[],notes:""}),name:data.name.trim(),oneLiner:data.oneLiner.trim(),description:data.description.trim(),type:data.type,status:data.status,phase:data.phase,priority:data.priority,progress:Math.max(0,Math.min(100,+data.progress||0)),health:data.health===""?null:Math.max(0,Math.min(100,+data.health)),targetDate:data.targetDate,technologies:data.technologies.split(",").map(x=>x.trim()).filter(Boolean),updatedAt:new Date().toISOString()};
+    const item={...(existing||{id:id(),createdAt:today(),tasks:[],milestones:[],blockers:[],bugs:[],goals:[],notes:""}),name:data.name.trim(),oneLiner:data.oneLiner.trim(),description:data.description.trim(),githubUrl:safeUrl(data.githubUrl),type:data.type,status:data.status,phase:data.phase,priority:data.priority,progress:Math.max(0,Math.min(100,+data.progress||0)),health:data.health===""?null:Math.max(0,Math.min(100,+data.health)),targetDate:data.targetDate,technologies:data.technologies.split(",").map(x=>x.trim()).filter(Boolean),updatedAt:new Date().toISOString()};
     if(existing)Object.assign(existing,item);else state.projects.unshift(item);
     state.projectId=item.id;state.page="project";document.getElementById("overlay").innerHTML="";persist();render();showToast(existing?"Project updated.":"Project added.");return;
   }
@@ -364,7 +389,6 @@ document.addEventListener("change",e=>{
   else if(el.dataset.action==="sort"){state.ui.sort=el.value;persist();render()}
   else if(el.dataset.action==="import"&&el.files?.[0]){importData(el.files[0]);el.value=""}
   else if(el.dataset.action==="notes"){const p=projectFor(el.dataset.project);if(p){p.notes=el.value;persist();showToast("Notes saved.")}}
-  else if(el.dataset.action==="notes"===false&&el.matches("[data-action=notes]")){}
 });
 document.addEventListener("input",e=>{
   const el=e.target;
@@ -374,8 +398,15 @@ document.addEventListener("input",e=>{
   }
 });
 document.addEventListener("click",e=>{
+  const section=e.target.closest("[data-section]");
+  if(section){e.preventDefault();document.getElementById(section.dataset.section)?.scrollIntoView({behavior:"smooth"});return}
   const b=e.target.closest("[data-page]");if(b){go(b.dataset.page);return}
   if(e.target.closest(".modal")&&e.target.classList.contains("modal"))document.getElementById("overlay").innerHTML="";
+});
+document.addEventListener("keydown",e=>{
+  if((e.key==="Enter"||e.key===" ")&&e.target.matches('[role="button"][data-action="open-project"],[role="button"][data-action="open-build"]')){
+    e.preventDefault();e.target.click();
+  }
 });
 window.addEventListener("hashchange",()=>{
   const h=location.hash||"#/";
