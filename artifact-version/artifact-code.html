@@ -120,7 +120,8 @@ function nextUp(n=6){
   });
   rows.sort((a,b)=>b.score-a.score);
   const used={};const picked=rows.filter(x=>(used[x.p.id]=(used[x.p.id]||0)+1)<=2).slice(0,n);
-  return [...picked,...state.planTasks.filter(t=>t.status!=="done").slice(0,Math.max(0,n-picked.length)).map(t=>({p:{id:"inbox",name:"Personal list"},t,score:0}))];
+  const personal=state.planTasks.filter(t=>t.status!=="done").slice(0,n).map(t=>({p:{id:"inbox",name:"Personal list"},t,score:0}));
+  return [...picked.slice(0,Math.max(0,n-personal.length)),...personal];
 }
 function pill(text,cls=""){return `<span class="chip ${cls}">${esc(text)}</span>`}
 function projectCard(p){
@@ -255,7 +256,7 @@ function setTheme(){
   state.theme=state.theme==="dark"?"light":"dark";document.documentElement.dataset.theme=state.theme;persist();render();
 }
 function exportData(){
-  const data={format:"project-tracker-artifact",version:1,exportedAt:new Date().toISOString(),projects:state.projects,physical:state.physical,analytics:state.analytics,theme:state.theme};
+  const data={format:"project-tracker-artifact",version:1,exportedAt:new Date().toISOString(),projects:state.projects,physical:state.physical,planTasks:state.planTasks,theme:state.theme};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="project-tracker-artifact-data.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);showToast("JSON backup downloaded.");
 }
@@ -283,7 +284,11 @@ function importData(file){
         if(!raw||typeof raw!=="object"||!String(raw.name||"").trim())throw new Error(`Physical build ${i+1} needs a name.`);
         return {...raw,id:String(raw.id||id()).slice(0,150),name:String(raw.name).slice(0,100),category:String(raw.category||"Other").slice(0,60),status:["planning","active","paused","done"].includes(raw.status)?raw.status:"planning",description:String(raw.description||"").slice(0,10000),budget:raw.budget==null?null:Math.max(0,Number(raw.budget)||0),color:Math.abs(Number(raw.color)||0)%8,target_date:String(raw.target_date||"").slice(0,10),milestones:bounded(Array.isArray(raw.milestones)?raw.milestones:[]).map(m=>{if(!m||typeof m!=="object")throw new Error(`Physical build ${i+1} has an invalid milestone.`);return {id:String(m.id||id()).slice(0,150),title:String(m.title||"Untitled milestone").slice(0,300),done:!!m.done}}),updates:bounded(Array.isArray(raw.updates)?raw.updates:[]).map(u=>{if(!u||typeof u!=="object")throw new Error(`Physical build ${i+1} has an invalid update.`);return {id:String(u.id||id()).slice(0,150),day:String(u.day||today()).slice(0,10),progress:u.progress==null?null:Math.max(0,Math.min(100,Number(u.progress)||0)),note:String(u.note||"").slice(0,2000),hours:Math.max(0,Number(u.hours)||0),cost:Math.max(0,Number(u.cost)||0)}})};
       });
-      state.projects=importedProjects;state.physical=importedPhysical;state.analytics=null;state.ui={...state.ui,status:"all",type:"all",q:""};
+      const importedPlanTasks=bounded(Array.isArray(obj.planTasks)?obj.planTasks:[]).slice(0,2000).map(t=>{
+        if(!t||typeof t!=="object")throw new Error("The imported planner contains an invalid task.");
+        return {id:String(t.id||id()).slice(0,150),title:String(t.title||"Untitled task").slice(0,300),detail:String(t.detail||"").slice(0,2000),status:["todo","doing","done"].includes(t.status)?t.status:"todo",priority:["high","medium","low"].includes(String(t.priority||"").toLowerCase())?String(t.priority).toLowerCase():"medium",projectId:null};
+      });
+      state.projects=importedProjects;state.physical=importedPhysical;state.planTasks=importedPlanTasks;state.analytics=null;state.ui={...state.ui,status:"all",type:"all",q:""};
       state.theme=obj.theme==="dark"?"dark":"light";document.documentElement.dataset.theme=state.theme;persist();go("dashboard");showToast("JSON data imported.");
     }catch(e){showToast("Could not import JSON: "+e.message);}
   };
