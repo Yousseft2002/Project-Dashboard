@@ -12,7 +12,7 @@ export function sourcePanel() {
     <p><a href="#/integrations">Settings → Integrations</a> · <a href="#/debug">Owner diagnostics</a></p>
     ${!state.data.projects.length ? '<p>No projects received. Register a device, configure workspace folders, then run the local collector. The hosted server cannot inspect your Windows folders.</p>' : ''}
     <p>${c.devices.filter(d=>d.status==='online').length} active devices · ${c.activity.filter(e=>e.event_type==='commit' && Date.now()-Date.parse(e.timestamp)<7*86400000).length} observed commits in 7 days</p>
-    ${c.devices.map(d=>`<p><b>${esc(d.id)}</b> · ${esc(d.status.toUpperCase())} · Last heartbeat: ${d.last_seen ? esc(ago(d.last_seen)) : 'never'}</p>`).join('') || '<p>No collectors registered.</p>'}
+    ${c.devices.map(d=>`<p><b>${esc(d.device_name || d.id)}</b> · ${esc(d.status.toUpperCase())} · Last heartbeat: ${d.last_seen ? esc(ago(d.last_seen)) : 'never'} · ${d.projects_synced || 0} projects<br>Last connection attempt: ${d.last_attempt ? esc(ago(d.last_attempt)) : 'Never'} · Last successful sync: ${d.last_sync ? esc(ago(d.last_sync)) : 'Never'}<br>Last error: ${esc(d.last_error || 'None reported by server')}</p>`).join('') || '<p>No collectors registered.</p>'}
     <p class="muted">GitHub and Render integrations not configured. Claude/Codex adapters report local session timestamps when available; prompt and outcome data are unavailable. VS Code activity is inferred from file metadata.</p>
     ${['claude','codex'].map(name=>`<p>${esc(name)}: ${c.sources.some(s=>s.name===name&&s.status==='connected') ? c.activity.some(e=>e.source===name) ? 'Local session metadata detected' : 'Connected · No activity detected in recognized workspaces' : 'Unavailable or not yet synced'}</p>`).join('')}
     <button class="btn" data-act="centralSync">Sync now</button><p id="centralSyncStatus" role="status"></p>
@@ -23,7 +23,12 @@ export function sourcePanel() {
 export function integrationsView() {
   const c = state.data.central;
   return `<h1>Settings → Integrations</h1><a href="#/">Dashboard</a>${sourcePanel()}
-    <section class="card" style="padding:20px"><h2>Register a collector</h2>
+    <section class="card" style="padding:20px"><h2>Connect a computer</h2>
+    <p>On that Windows computer, run <code>powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_collector.ps1</code> from the repository folder. It suggests workspaces, pairs this computer, proves heartbeat, then verifies one Git repository before syncing more.</p>
+    <h3>Approve a pairing code</h3><p>Approve only the exact code displayed by setup on your own computer. Credentials are generated locally, protected with Windows DPAPI, and are separate from your browser password.</p>
+    <form data-act="approveCollectorPair"><label>Pairing code <input name="code" required pattern="[A-Za-z0-9]{12}" maxlength="12"></label><button class="btn" type="submit">Approve this computer</button></form>
+    ${(c.pairings || []).map(p=>`<p>Pending: ${esc(p.device_name)} · ${esc(p.platform)} · code <b>${esc(p.code)}</b> · expires ${esc(p.expires_at)}</p>`).join('')}
+    <h3>Manual collector token</h3>
     <p>Register each computer separately. The token appears once; set it as COLLECTOR_TOKEN on that computer. Registering an existing ID rotates its token.</p>
     <form data-act="registerCollector"><label>Device ID <input name="device" required pattern="[A-Za-z0-9_.-]{1,80}" placeholder="YousseF-Desktop"></label><button class="btn" type="submit">Generate collector token</button></form>
     <div id="collectorCredential" role="status"></div>

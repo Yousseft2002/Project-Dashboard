@@ -3,7 +3,9 @@ import hashlib
 import json
 import re
 import secrets
+import logging
 from datetime import datetime, timezone
+from datetime import timedelta
 from urllib.parse import urlsplit
 
 SCHEMA = '''
@@ -16,6 +18,7 @@ CREATE INDEX IF NOT EXISTS activities_time ON activities(timestamp);
 CREATE TABLE IF NOT EXISTS ai_sessions(id TEXT PRIMARY KEY, project_id TEXT REFERENCES central_projects(id), device_id TEXT, source TEXT, timestamp TEXT);
 CREATE TABLE IF NOT EXISTS ingestion_events(id INTEGER PRIMARY KEY, device_id TEXT, timestamp TEXT, status TEXT, reason TEXT, projects INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS sync_requests(device_id TEXT PRIMARY KEY, requested_at TEXT, fulfilled_at TEXT);
+CREATE TABLE IF NOT EXISTS collector_pairings(code TEXT PRIMARY KEY, secret_hash TEXT UNIQUE NOT NULL, token_hash TEXT NOT NULL, installation_id TEXT NOT NULL, device_name TEXT NOT NULL, platform TEXT, collector_version TEXT, expires_at TEXT NOT NULL, device_id TEXT);
 '''
 
 def now():
@@ -101,6 +104,72 @@ class CentralStore:
         self.db = db
         with db.conn() as c:
             c.executescript(SCHEMA)
+            columns = {r[1] for r in c.execute('PRAGMA table_info(devices)')}
+            for name, sql_type in {'device_name':'TEXT', 'platform':'TEXT', 'first_seen':'TEXT', 'collector_version':'TEXT', 'installation_id':'TEXT', 'last_attempt':'TEXT', 'last_error':'TEXT', 'last_sync':'TEXT', 'projects_synced':'INTEGER DEFAULT 0', 'activities_synced':'INTEGER DEFAULT 0'}.items():
+                if name not in columns:
+                    c.execute(f'ALTER TABLE devices ADD COLUMN {name} {sql_type}')
+
+    def pairing_start(self, body):
+        for field in ('secret_hash','token_hash'):
+            if not re.fullmatch(r'[a-f0-9]{64}',str(body.get(field,''))):
+                raise ValueError('Invalid pairing request')
+        for field in ('installation_id','device_name'):
+            if not isinstance(body.get(field),str) or not re.fullmatch(r'[\w .-]{1,80}',body[field]):
+                raise ValueError('Invalid pairing metadata')
+        for field in ('platform','collector_version'):
+            if not isinstance(body.get(field,''),str) or len(body.get(field,''))>100:
+                raise ValueError('Invalid pairing metadata')
+        code=''.join(secrets.choice('ABCDEFGHJKMNPQRSTUVWXYZ23456789') for _ in range(12))
+        expires=(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat()
+        with self.db.conn() as c:
+            c.execute('DELETE FROM collector_pairings WHERE expires_at<?',(now(),))
+            if c.execute('SELECT COUNT(*) FROM collector_pairings').fetchone()[0]>=100:
+                raise ValueError('Pairing capacity reached; try later')
+            c.execute('INSERT INTO collector_pairings VALUES (?,?,?,?,?,?,?,?,NULL)',(code,body['secret_hash'],body['token_hash'],body['installation_id'],body['device_name'],body.get('platform'),body.get('collector_version'),expires))
+        return {'ok':True,'pairing_code':code,'expires_at':expires}
+
+    def pairing_approve(self, code):
+        with self.db.conn() as c:
+            row=c.execute('SELECT * FROM collector_pairings WHERE code=? AND expires_at>?',(str(code).strip().upper(),now())).fetchone()
+            if not row: raise ValueError('Pairing code invalid or expired')
+            if row['device_id']: return {'ok':True,'device_id':row['device_id']}
+            device_id=re.sub(r'[^\w.-]','-',row['device_name'])[:60]+'-'+row['installation_id'].replace('-','')[:8]
+            existing=c.execute('SELECT installation_id FROM devices WHERE id=?',(device_id,)).fetchone()
+            if existing and existing['installation_id']!=row['installation_id']:
+                raise ValueError('Device identity conflict')
+            c.execute('INSERT INTO devices(id,token_hash,installation_id,device_name,platform,collector_version) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET token_hash=excluded.token_hash,revoked=0', (device_id,row['token_hash'],row['installation_id'],row['device_name'],row['platform'],row['collector_version']))
+            c.execute('UPDATE collector_pairings SET device_id=? WHERE code=?',(device_id,row['code']))
+        self.log(device_id,'accepted','DEVICE PAIR APPROVED')
+        return {'ok':True,'device_id':device_id}
+
+    def pairing_claim(self, secret):
+        if not isinstance(secret,str) or not 30<=len(secret)<=200:
+            raise ValueError('Invalid pairing credential')
+        with self.db.conn() as c:
+            row=c.execute('SELECT device_id FROM collector_pairings WHERE secret_hash=? AND expires_at>?',(hashlib.sha256(secret.encode()).hexdigest(),now())).fetchone()
+        if not row: raise ValueError('Pairing request invalid or expired')
+        return {'ok':True,'approved':bool(row['device_id']),'device_id':row['device_id']}
+
+    def register_collector(self, device, body):
+        name = body.get('device_name') or device
+        installation = body.get('installation_id')
+        if not isinstance(name, str) or not re.fullmatch(r'[\w .-]{1,80}', name):
+            raise ValueError('Invalid device name')
+        if installation and (not isinstance(installation,str) or not re.fullmatch(r'[\w.-]{1,80}', installation)):
+            raise ValueError('Invalid installation ID')
+        for field in ('platform','collector_version'):
+            if body.get(field) is not None and (not isinstance(body[field],str) or len(body[field])>100):
+                raise ValueError('Invalid collector metadata')
+        stamp=now()
+        with self.db.conn() as c:
+            row=c.execute('SELECT installation_id FROM devices WHERE id=?', (device,)).fetchone()
+            if row['installation_id'] and installation and row['installation_id'] != installation:
+                raise ValueError('Token already belongs to another installation; issue a separate device token')
+            if body.get('device_id') and body['device_id'] != device:
+                raise ValueError('Configured device ID does not match the collector token')
+            c.execute('UPDATE devices SET device_name=?,platform=?,collector_version=?,installation_id=COALESCE(installation_id,?),first_seen=COALESCE(first_seen,?),last_seen=?,last_attempt=?,last_error=NULL WHERE id=?', (name,body.get('platform'),body.get('collector_version'),installation,stamp,stamp,stamp,device))
+        self.log(device,'accepted','DEVICE REGISTER')
+        return {'ok':True,'device_id':device,'device_name':name,'registered':True,'last_seen':stamp,'database_write':True}
 
     def register(self, device):
         if not isinstance(device, str) or not re.fullmatch(r'[\w.-]{1,80}', device):
@@ -120,12 +189,17 @@ class CentralStore:
     def log(self, device, status, reason, count=0):
         with self.db.conn() as c:
             c.execute('INSERT INTO ingestion_events(device_id,timestamp,status,reason,projects) VALUES (?,?,?,?,?)', (device, now(), status, reason, count))
+            if device:
+                c.execute('UPDATE devices SET last_attempt=?,last_error=? WHERE id=?', (now(),reason if status in ('failed','rejected') else None,device))
+        logging.getLogger('tracker.ingestion').info('%s device=%s status=%s projects=%s', reason,device or 'unknown',status,count)
 
     def heartbeat(self, device):
+        stamp=now()
         with self.db.conn() as c:
-            c.execute('UPDATE devices SET last_seen=? WHERE id=?', (now(), device))
+            c.execute('UPDATE devices SET last_seen=?,first_seen=COALESCE(first_seen,?),last_attempt=?,last_error=NULL WHERE id=?', (stamp,stamp,stamp,device))
             row = c.execute('SELECT requested_at,fulfilled_at FROM sync_requests WHERE device_id=?', (device,)).fetchone()
-        return {'ok': True, 'sync_requested': bool(row and (not row['fulfilled_at'] or row['requested_at'] > row['fulfilled_at']))}
+        logging.getLogger('tracker.ingestion').info('HEARTBEAT device=%s status=success',device)
+        return {'ok': True, 'device_id':device, 'last_seen':stamp, 'database_write':True, 'sync_requested': bool(row and (not row['fulfilled_at'] or row['requested_at'] > row['fulfilled_at']))}
 
     def ingest(self, device, body):
         incoming = body.get('projects')
@@ -133,6 +207,8 @@ class CentralStore:
             raise ValueError('projects must be a list with at most 500 entries')
         projects = [clean_project(p) for p in incoming]  # validate whole batch before changing anything
         stamp = now()
+        created = updated = received_events = accepted_events = 0
+        project_ids = []
         reports = body.get('sources', [])
         if not isinstance(reports, list) or len(reports) > 20:
             raise ValueError('Invalid source reports')
@@ -147,6 +223,10 @@ class CentralStore:
                 old = c.execute('SELECT project_id,data FROM observations WHERE device_id=?', (device,)).fetchall()
                 prior = next((r for r in old if json.loads(r['data'])['path'].replace('\\', '/').lower() == p['path'].replace('\\', '/').lower()), None)
                 canonical = c.execute('SELECT id FROM central_projects WHERE identity=?', (identity,)).fetchone()
+                if canonical or prior:
+                    updated += 1
+                else:
+                    created += 1
                 if canonical:
                     pid = canonical['id']
                 elif prior:
@@ -163,30 +243,45 @@ class CentralStore:
                         c.execute(f'UPDATE OR IGNORE {table} SET {column}=? WHERE {column}=?', (pid, old_id))
                     c.execute('DELETE FROM central_projects WHERE id=?', (old_id,))
                 c.execute('INSERT INTO observations VALUES (?,?,?,?) ON CONFLICT(project_id,device_id) DO UPDATE SET data=excluded.data,synced_at=excluded.synced_at', (pid, device, json.dumps(p), stamp))
+                project_ids.append(pid)
                 for commit in p['commits']:
-                    self._event(c, pid, device, 'git', 'commit', commit['timestamp'], 'Commit ' + commit['sha'][:12], 'commit:' + identity + ':' + commit['sha'])
+                    received_events += 1
+                    accepted_events += self._event(c, pid, device, 'git', 'commit', commit['timestamp'], 'Commit ' + commit['sha'][:12], 'commit:' + identity + ':' + commit['sha'])
                 for session in p['ai_sessions']:
                     sid = session['source'] + ':' + session['session_id']
                     c.execute('INSERT INTO ai_sessions VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET timestamp=MAX(ai_sessions.timestamp,excluded.timestamp)', (sid,pid,device,session['source'],session['timestamp']))
-                    self._event(c,pid,device,session['source'],'ai_session',session['timestamp'],'Local session metadata observed (prompt and outcome unavailable)',sid)
+                    received_events += 1
+                    accepted_events += self._event(c,pid,device,session['source'],'ai_session',session['timestamp'],'Local session metadata observed (prompt and outcome unavailable)',sid)
                     c.execute('UPDATE activities SET timestamp=MAX(timestamp,?) WHERE id=?', (session['timestamp'],hashlib.sha256(sid.encode()).hexdigest()))
                 if p['last_activity']:
-                    self._event(c, pid, device, 'workspace', 'file_change', p['last_activity'], 'Workspace modification observed; editor activity inferred', 'files:' + pid + ':' + device + ':' + p['last_activity'])
+                    received_events += 1
+                    accepted_events += self._event(c, pid, device, 'workspace', 'file_change', p['last_activity'], 'Workspace modification observed; editor activity inferred', 'files:' + pid + ':' + device + ':' + p['last_activity'])
             for r in reports:
                 ok = r['status'] in ('connected', 'inferred')
                 c.execute('INSERT INTO sources(device_id,name,status,last_success,projects,activities,warnings,errors) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(device_id,name) DO UPDATE SET status=excluded.status,last_success=COALESCE(excluded.last_success,sources.last_success),projects=excluded.projects,warnings=excluded.warnings,errors=excluded.errors', (device, r['name'], r['status'], stamp if ok else None, len(projects) if ok else 0, 0, json.dumps(['Derived from filesystem metadata'] if r['status']=='inferred' else []), json.dumps(['Connector unavailable; check collector console'] if r['status']=='error' else [])))
-            c.execute('UPDATE devices SET last_seen=? WHERE id=?', (stamp, device))
+            c.execute('UPDATE devices SET last_seen=?,last_attempt=?,last_sync=?,last_error=NULL,projects_synced=?,activities_synced=? WHERE id=?', (stamp,stamp,stamp,len(projects),accepted_events,device))
             c.execute('UPDATE sync_requests SET fulfilled_at=? WHERE device_id=?', (stamp, device))
             c.execute('INSERT INTO ingestion_events(device_id,timestamp,status,reason,projects) VALUES (?,?,?,?,?)', (device, stamp, 'accepted', 'Metadata merged', len(projects)))
-        return {'ok': True, 'projects': len(projects), 'last_synced': stamp}
+        logging.getLogger('tracker.ingestion').info('PROJECT SYNC device=%s received=%s created=%s updated=%s',device,len(projects),created,updated)
+        logging.getLogger('tracker.ingestion').info('ACTIVITY SYNC device=%s received=%s accepted=%s duplicates=%s',device,received_events,accepted_events,received_events-accepted_events)
+        return {'ok': True, 'device_id':device,'projects': len(projects), 'project_ids':project_ids,'created':created,'updated':updated,'activity_received':received_events,'activity_accepted':accepted_events,'activity_duplicates':received_events-accepted_events,'last_synced': stamp,'database_write':True}
 
     def _event(self, c, pid, device, source, kind, ts, summary, identity):
         eid = hashlib.sha256(identity.encode()).hexdigest()
-        c.execute('INSERT OR IGNORE INTO activities VALUES (?,?,?,?,?,?,?,?)', (eid, pid, device, source, kind, ts, summary, 1))
+        return c.execute('INSERT OR IGNORE INTO activities VALUES (?,?,?,?,?,?,?,?)', (eid, pid, device, source, kind, ts, summary, 1)).rowcount
+
+    def collector_status(self, device):
+        with self.db.conn() as c:
+            row=c.execute('SELECT id,device_name,platform,first_seen,last_seen,last_sync,collector_version,last_attempt,last_error,projects_synced FROM devices WHERE id=?', (device,)).fetchone()
+            projects=[]
+            for r in c.execute('SELECT project_id,synced_at,data FROM observations WHERE device_id=?', (device,)):
+                data=json.loads(r['data'])
+                projects.append({'project_id':r['project_id'],'synced_at':r['synced_at'],'name':data['name'],'repository':data['repository'],'branch':data.get('branch'),'latest_commit':data['commits'][0] if data['commits'] else None})
+        return {'ok':True,'device':dict(row),'projects':projects,'database_write':bool(row['last_seen'])}
 
     def snapshot(self):
         with self.db.conn() as c:
-            devices = [dict(r) for r in c.execute('SELECT id,last_seen,revoked FROM devices')]
+            devices = [dict(r) for r in c.execute('SELECT id,device_name,platform,first_seen,last_seen,revoked,collector_version,last_attempt,last_error,last_sync,projects_synced,activities_synced FROM devices')]
             sources = [dict(r) for r in c.execute('SELECT * FROM sources')]
             events = [dict(r) for r in c.execute('SELECT * FROM activities ORDER BY timestamp DESC LIMIT 500')]
             rows = [dict(r) for r in c.execute('SELECT * FROM central_projects')]
@@ -194,6 +289,7 @@ class CentralStore:
             logs = [dict(r) for r in c.execute('SELECT * FROM ingestion_events ORDER BY id DESC LIMIT 50')]
             requests = [dict(r) for r in c.execute('SELECT * FROM sync_requests')]
             sessions = [dict(r) for r in c.execute('SELECT * FROM ai_sessions ORDER BY timestamp DESC')]
+            pairings=[dict(r) for r in c.execute('SELECT code,device_name,platform,collector_version,expires_at FROM collector_pairings WHERE device_id IS NULL AND expires_at>?',(now(),))]
         for d in devices:
             d['status'] = 'revoked' if d['revoked'] else 'online' if d['last_seen'] and (datetime.now(timezone.utc)-datetime.fromisoformat(d['last_seen'])).total_seconds() < 180 else 'offline'
         for s in sources:
@@ -204,7 +300,7 @@ class CentralStore:
             p['observations'] = [dict(json.loads(o['data']), device_id=o['device_id'], synced_at=o['synced_at']) for o in observations if o['project_id']==p['id']]
             p['timeline'] = [e for e in events if e['project_id']==p['id']]
             p['ai_sessions'] = [s for s in sessions if s['project_id']==p['id']]
-        return {'projects': rows, 'devices': devices, 'sources': sources, 'activity': events, 'ingestion': logs, 'sync_requests': requests}
+        return {'projects': rows, 'devices': devices, 'sources': sources, 'activity': events, 'ingestion': logs, 'sync_requests': requests,'pairings':pairings}
 
     def raw_projects(self):
         out = []

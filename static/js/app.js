@@ -177,6 +177,7 @@ const ACTIONS = {
     const r = await api('POST', '/api/integrations/sync');
     toast(r.message); await load();
   },
+  async approveCollectorPair(el) { await api('POST','/api/integrations/pair/approve',{code:el.elements.code.value}); await load(); toast('Computer approved. Setup will continue on that computer.'); },
   async registerCollector(el) {
     const r = await api('POST', '/api/integrations/devices', {device_id: el.elements.device.value});
     document.getElementById('collectorCredential').innerHTML = `<p>Device: ${esc(r.device_id)}</p><p>Copy this token now. It will not be shown again.</p><input type="password" readonly aria-label="Collector token" value="${esc(r.token)}"><button type="button" class="btn" data-act="revealCollectorToken">Show token</button>`;

@@ -1,8 +1,10 @@
 {
   "server": "https://project-dashboard-0d02.onrender.com",
+  "device_name": "YousseF-Laptop",
   "workspaces": ["C:\\Users\\YOUR_USER\\Documents\\Projects"],
   "sync_seconds": 300,
   "max_depth": 5,
-  "ai_metadata": true,
+  "heartbeat_seconds": 60,
+  "ai_metadata": false,
   "ignore": []
 }
