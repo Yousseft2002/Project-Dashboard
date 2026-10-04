@@ -16,7 +16,7 @@ f.addEventListener("submit", async (e) => {
     if (res.ok) { location.replace("/"); return; }
     err.textContent = json.error || "Sign-in failed.";
   } catch {
-    err.textContent = "Can't reach the PC. Is Project Tracker running?";
+    err.textContent = "Can't reach Project Tracker. Check your connection and try again.";
   }
   err.hidden = false;
   go.disabled = false;

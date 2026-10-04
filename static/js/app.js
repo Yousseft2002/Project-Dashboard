@@ -75,8 +75,10 @@ scanBtn.addEventListener("click", async () => { await api("POST", "/api/scan"); 
 function updateScanStatus(s) {
   const el = document.getElementById("scanStatus");
   const machines = state.data?.digital?.machines || [];
-  scanBtn.disabled = !!s.running;
-  scanBtn.innerHTML = `${icon("refresh", 15, s.running ? "spin" : "")}<span>${s.running ? "Scanning…" : "Rescan"}</span>`;
+  const unavailable = state.data?.meta?.scanAvailable === false;
+  scanBtn.disabled = !!s.running || unavailable;
+  scanBtn.title = unavailable ? "Folder scanning requires the local development server" : "Re-scan project folders and AI sessions";
+  scanBtn.innerHTML = `${icon("refresh", 15, s.running ? "spin" : "")}<span>${unavailable ? "Local scan only" : s.running ? "Scanning…" : "Rescan"}</span>`;
   el.textContent = s.running ? s.message || "Scanning…" : s.error ? "Scan failed: " + s.error
     : machines.length ? "Scanned · " + machines.map((m) => `${machineLabel(m.machine)} ${ago(m.scanned_at)}`).join(" · ") : "";
 }

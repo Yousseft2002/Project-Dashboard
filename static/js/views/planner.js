@@ -63,6 +63,7 @@ function timeMeter(pl) {
 
 function focusHero(pl) {
   const p = pl.plan, s = pl.summary, j = job();
+  const cloud = state.data.access?.cloud;
   const done = s.planned ? Math.round((s.done / s.planned) * 100) : 0;
   const chip = !p ? "" : p.source === "ai"
     ? `<span class="ai-chip" title="Written by the AI from the ranked candidates">${icon("sparkles", 12)}AI plan</span>`
@@ -77,7 +78,7 @@ function focusHero(pl) {
         : `<h2 class="fh-title muted">N/A</h2><p class="fh-text">No open tasks to plan yet. Add tasks to a project, or tell the AI what you're working on.</p>`}
       ${running}${warn}${err}
       <div class="fh-actions">
-        <button class="btn primary" data-act="planRegenerate" ${busy() ? "disabled" : ""}>${icon("refresh", 15, busy() ? "spin" : "")}Regenerate plan</button>
+        <button class="btn primary" data-act="planRegenerate" ${busy() || cloud ? "disabled" : ""} title="${cloud ? "AI planning requires the local Claude Code CLI" : ""}">${icon("refresh", 15, busy() ? "spin" : "")}${cloud ? "AI plan local only" : "Regenerate plan"}</button>
         <a class="btn" href="#/history">${icon("calendar", 15)}Daily history</a>
         ${p?.generatedAt ? `<span class="muted fh-when">Planned ${new Date(p.generatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>` : ""}
       </div>
@@ -194,6 +195,9 @@ function directiveLine(d) {
 
 function contextPanel(pl) {
   const ui = state.planUi, j = job();
+  if (state.data.access?.cloud) {
+    return panel("AI context", `<p class="muted">AI-generated instructions require the Claude Code CLI on the local computer. The cloud deployment still supports the deterministic task shortlist and manual task tracking.</p>`, { iconName: "sparkles", cls: "plan-ctx" });
+  }
   const reply = j.reply && j.reply !== ui.dismissed ? `<div class="ai-reply">${icon("sparkles", 15)}<p>${esc(j.reply)}</p>
       <button class="icon-x always" data-act="planDismissReply" aria-label="Dismiss">${icon("x", 14)}</button></div>` : "";
   const body = `<form class="ctx-form" data-act="planInstruction">

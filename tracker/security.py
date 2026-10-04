@@ -192,6 +192,32 @@ def try_code(ip: str, candidate: str) -> bool:
     return False
 
 
+def try_password(ip: str, candidate: str, expected: str) -> bool:
+    """Check a deployment password with the same per-IP and global login throttles."""
+    global _global_locked_until
+    now = time.time()
+    with _lock:
+        wait = max(_global_locked_until - now, (_ip_fails.get(ip) or [0, 0])[1] - now)
+        if wait > 0:
+            return False
+        ok = hmac.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8"))
+        if ok:
+            _ip_fails.pop(ip, None)
+            return True
+        rec = _ip_fails.setdefault(ip, [0, 0.0])
+        rec[0] += 1
+        if rec[0] >= MAX_FAILS:
+            rec[0], rec[1] = 0, now + LOCK_SECONDS
+        _recent_fails.append(now)
+        while _recent_fails and _recent_fails[0] < now - GLOBAL_WINDOW:
+            _recent_fails.popleft()
+        if len(_recent_fails) >= GLOBAL_FAILS:
+            _global_locked_until = now + GLOBAL_LOCK
+            _recent_fails.clear()
+    time.sleep(0.5)
+    return False
+
+
 # ------------------------------------------------------------------ network identity
 
 def is_private(ip: str) -> bool:
@@ -225,7 +251,7 @@ def lan_ips() -> list[str]:
     return out
 
 
-def host_ok(host_header: str, remote: bool, port: int) -> bool:
+def host_ok(host_header: str, remote: bool, port: int, expected_host: str | None = None) -> bool:
     """Reject requests addressed to any name we don't own (DNS-rebinding defence)."""
     host = (host_header or "").strip().lower()
     if not host:
@@ -237,6 +263,9 @@ def host_ok(host_header: str, remote: bool, port: int) -> bool:
         name, _, p = host.partition(":")
     else:
         name, p = host, ""
+    if expected_host:
+        expected = expected_host.strip().lower().rstrip(".")
+        return name.rstrip(".") == expected and p in ("", str(port))
     if p != str(port):
         return False
     if not remote:
