@@ -1,0 +1,11 @@
+Create this application as an interactive Claude Artifact from the attached `artifact-code.html` source. Render it as a working app rather than displaying the source code or summarizing it.
+
+Project Tracker is a responsive personal command-center dashboard. Preserve its existing product identity, layout, navigation, terminology, density, visual hierarchy, light/dark color scheme, and blue-accented card design as closely as possible. Keep the Dashboard, Physical, and YT Dashboard sections, project cards and detail workflow, portfolio statistics and charts, task lists, milestones, issues, and settings/data controls.
+
+The source is a complete standalone HTML/CSS/JavaScript prototype. It has no package imports, server, network requests, external assets, or API credentials. Keep it self-contained and compatible with the Artifact sandbox. Do not introduce calls to a local server, private IP, remote API, filesystem, or secret store. Keep calculations, filtering, sorting, navigation, forms, task status, progress, and charts deterministic and client-side.
+
+The included sample projects and builds are synthetic examples, not real project or customer records. Do not invent real traffic, revenue, analytics, or private information. Keep the YT Dashboard values marked N/A unless data is explicitly supplied by the user. Explain unavailable backend-dependent functions (local folder scanning, Git/session discovery, Claude Code CLI jobs, screenshot capture, host app launching, server authentication, SQLite persistence, and OneDrive synchronization) rather than pretending they work.
+
+Keep the app interactive: test section navigation, project detail navigation, project/task/milestone forms, build logging, search and filters, theme, and JSON import/export. Prefer the provided implementation over a redesign. If Artifact-specific changes are required, make only the smallest changes needed and retain equivalent behavior and appearance.
+
+Show the finished dashboard in the Artifact preview so it is ready to test and publish/share using Claude's Artifact controls.

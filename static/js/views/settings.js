@@ -57,7 +57,7 @@ function body() {
   if (state.data.access?.remote) {
     return `<div class="form settings">
       <div class="dlg-head"><h2>${icon("lock", 20)}Signed in</h2><button class="icon-x always" value="close" aria-label="Close">${icon("x", 16)}</button></div>
-      <section><p class="muted">You're using Project Tracker from your phone. Sync settings and opening folders are only available on the PC.</p>
+      <section><p class="muted">${state.data.access.cloud ? "You're using the protected cloud deployment. Local folders, scanning, previews, and computer sync require the local server." : "You're using Project Tracker from your phone. Sync settings and opening folders are only available on the PC."}</p>
       <div class="row-actions"><button type="button" class="btn" data-act="signOut">Sign out</button></div></section></div>`;
   }
   const others = state.data.digital.machines.filter((m) => !m.local);
@@ -94,7 +94,7 @@ export function openSettings() {
   dlg.innerHTML = `<form method="dialog">${body()}</form>`;
   document.body.appendChild(dlg);
   dlg.showModal();
-  if (!state.data.access?.remote) api("GET", "/api/access").then((a) => { phone = a; refresh(); }).catch(() => {});
+  if (!state.data.access?.remote && !state.data.access?.cloud) api("GET", "/api/access").then((a) => { phone = a; refresh(); }).catch(() => {});
   dlg.addEventListener("close", () => { dlg.remove(); dlg = null; });
 }
 function refresh() { if (dlg) dlg.querySelector("form").innerHTML = body(); }

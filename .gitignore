@@ -2,3 +2,9 @@ data/
 __pycache__/
 *.pyc
 static/Python/
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3

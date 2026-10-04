@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f3f3f0">
+<title>Project Tracker · Artifact</title>
+<style>
+:root{color-scheme:light;--page:#f3f3f0;--surface:#fcfcfb;--surface2:#f0efec;--surface3:#e8e7e2;--border:rgba(11,11,11,.09);--border-strong:rgba(11,11,11,.16);--text:#0b0b0b;--text2:#52514e;--muted:#898781;--grid:#e1e0d9;--accent:#2a78d6;--good:#0ca30c;--warning:#fab219;--critical:#d03b3b;--serious:#ec835a;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#4a3aa7;--s8:#e34948;--shadow:0 1px 2px rgba(0,0,0,.04),0 6px 24px rgba(0,0,0,.05);--radius:16px}
+:root[data-theme=dark]{color-scheme:dark;--page:#0b0c0e;--surface:#16171a;--surface2:#1e1f23;--surface3:#26272c;--border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);--text:#fff;--text2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--accent:#3987e5;--good:#0ca30c;--critical:#e66767;--shadow:0 1px 0 rgba(255,255,255,.03) inset}
+*{box-sizing:border-box}html,body{margin:0}body{background:var(--page);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}h1,h2,h3,p{margin:0}h1{font-size:28px;line-height:1.2;letter-spacing:-.015em}h2{font-size:16px;line-height:1.2}h3{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}small,.muted{color:var(--muted)}.small{font-size:12px}
+.topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:26px;padding:10px max(20px,calc((100vw - 1384px)/2));background:color-mix(in srgb,var(--page) 88%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);flex-wrap:wrap}.brand{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;white-space:nowrap}.logo{display:grid;place-items:center;width:29px;height:29px;border-radius:9px;background:var(--accent);color:white;font-weight:800;font-size:17px}.tabs{display:flex;gap:4px;overflow-x:auto}.tabs button{border:0;background:none;color:var(--text2);padding:7px 13px;border-radius:9px;white-space:nowrap}.tabs button:hover,.tabs button.active{background:var(--surface);color:var(--text);box-shadow:inset 0 0 0 1px var(--border-strong)}.top-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn,.icon-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface);padding:7px 12px;border-radius:10px;white-space:nowrap;transition:.15s}.btn:hover,.icon-btn:hover{background:var(--surface2)}.btn.primary{background:var(--accent);color:white;border-color:transparent;font-weight:600}.btn.danger{color:var(--critical)}.btn.small{font-size:12px;padding:4px 9px}.icon-btn{width:35px;height:35px;padding:0;color:var(--text2)}button:disabled{opacity:.5;cursor:default}input,select,textarea{border:1px solid var(--border-strong);background:var(--surface);border-radius:9px;padding:8px 10px;min-width:0}textarea{width:100%;min-height:84px;resize:vertical}input[type=range]{accent-color:var(--accent)}
+.app{max-width:1440px;margin:auto;padding:26px 28px 60px}.page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px}.page-head p{margin-top:6px;color:var(--text2)}.eyebrow{display:flex;align-items:center;gap:7px;margin-bottom:6px;font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em}.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);min-width:0}.panel{padding:16px 18px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.panel-head h2{font-size:15px}.section{margin-top:28px}.grid2,.grid3{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}.stack{display:grid;gap:16px}.empty{padding:18px 4px;color:var(--muted);font-size:13px}
+.hero{position:relative;overflow:hidden;padding:22px;background:radial-gradient(900px 340px at 0 0,color-mix(in srgb,var(--accent) 13%,transparent),transparent 70%),radial-gradient(700px 300px at 100% 100%,color-mix(in srgb,var(--s7) 9%,transparent),transparent 70%),var(--surface)}.hero-grid{display:grid;grid-template-columns:210px minmax(400px,1fr) 185px;gap:24px;align-items:center}.hero-ring{display:grid;justify-items:center;gap:12px}.ring{display:grid;place-items:center;width:var(--size,126px);aspect-ratio:1;border-radius:50%;background:conic-gradient(var(--ring-color,var(--accent)) calc(var(--pct)*1%),var(--surface3) 0);position:relative}.ring:before{content:"";position:absolute;inset:var(--thickness,12px);border-radius:50%;background:var(--surface)}.ring-center{position:relative;text-align:center;line-height:1.2}.ring-center b{display:block;font-size:26px}.ring-center span{font-size:11px;color:var(--text2)}.hero-ring-foot{display:flex;gap:13px;color:var(--text2);font-size:12px}.hero-tiles{display:grid;grid-template-columns:repeat(4,minmax(100px,1fr));gap:9px}.stat-tile{display:flex;flex-direction:column;align-items:flex-start;min-height:80px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left}.stat-tile:hover{box-shadow:var(--shadow)}.stat-tile .st-label{color:var(--text2);font-size:11.5px}.stat-tile b{font-size:22px;line-height:1.2;margin-top:4px}.hero-donut{display:grid;justify-items:center;gap:10px}.legend{display:flex;gap:8px 14px;flex-wrap:wrap;color:var(--text2);font-size:12px}.legend.vertical{display:grid;gap:5px;width:100%}.legend li{display:flex;align-items:center;gap:6px;list-style:none}.legend b{margin-left:auto;color:var(--text)}.sw{width:9px;height:9px;border-radius:3px;display:inline-block}.hero-lower{display:grid;grid-template-columns:1fr 1.2fr .8fr;gap:26px;border-top:1px solid var(--border);margin-top:18px;padding-top:16px}.hero-lower h3{margin-bottom:10px}.cols{height:130px;display:flex;align-items:flex-end;gap:6px}.col{flex:1;display:grid;justify-items:center;gap:3px;min-width:0;font-size:10px;color:var(--text2)}.col-track{display:flex;align-items:flex-end;justify-content:center;background:var(--surface2);height:85px;width:100%;max-width:44px;border-radius:7px 7px 3px 3px;overflow:hidden}.col-bar{width:100%;min-height:2px;border-radius:5px 5px 0 0}.col-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}.bar-list{display:grid;gap:8px}.bar-row{display:grid;grid-template-columns:minmax(76px,1fr) 2fr 25px;gap:8px;align-items:center;font-size:12px}.bar-track,.progress-track{height:8px;border-radius:99px;background:var(--surface3);overflow:hidden}.bar-track i,.progress-track i{height:100%;display:block;border-radius:99px;background:var(--accent)}
+.focus-grid{display:grid;grid-template-columns:1fr 1fr .95fr;gap:16px;margin-top:18px}.focus-grid>.card{padding:16px}.list{list-style:none;padding:0;margin:0;display:grid;gap:9px}.list li{display:flex;align-items:flex-start;gap:9px}.number{display:grid;place-items:center;width:20px;height:20px;border-radius:7px;background:var(--surface2);color:var(--accent);font-weight:700;font-size:11px;flex:none}.list-main{min-width:0;flex:1}.list-title{font-weight:600}.list-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:2px;color:var(--muted);font-size:11px}.chip{display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border-radius:7px;padding:2px 8px;color:var(--text2);font-size:11px}.chip.status{background:color-mix(in srgb,var(--accent) 11%,var(--surface));color:var(--accent)}.chip.high{background:color-mix(in srgb,var(--serious) 17%,var(--surface));color:#a8481f}.mini-list{display:grid;gap:10px}.mini-row{display:grid;grid-template-columns:minmax(70px,1fr) 1.6fr 34px;gap:8px;align-items:center;font-size:12px}.mini-row b{text-align:right}
+.section-title{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}.section-title h2{display:flex;gap:8px;align-items:center}.count{display:grid;place-items:center;min-width:23px;height:22px;padding:0 6px;border-radius:8px;background:var(--surface3);font-size:11px}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}.search{min-width:210px;flex:1}.seg{display:flex;gap:3px;padding:3px;border-radius:10px;background:var(--surface2)}.seg button{border:0;background:none;padding:6px 9px;color:var(--text2);border-radius:7px;font-size:12px;white-space:nowrap}.seg button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px var(--border)}.seg button span{margin-left:5px;color:var(--muted)}.pgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.project-card{padding:15px;cursor:pointer;transition:transform .15s,box-shadow .15s}.project-card:hover{transform:translateY(-2px);box-shadow:0 10px 28px var(--border)}.pc-head{display:flex;gap:12px;align-items:center}.pc-icon{display:grid;place-items:center;width:46px;height:46px;flex:none;border-radius:13px;background:color-mix(in srgb,var(--tc) 15%,var(--surface));color:var(--tc);font-size:17px;font-weight:750}.pc-head h3{font-size:14px;color:var(--text);text-transform:none;letter-spacing:0}.pc-head p{color:var(--text2);font-size:12px;margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.pc-badges{display:flex;gap:6px;flex-wrap:wrap;margin:13px 0}.pc-foot{display:flex;justify-content:space-between;align-items:center;color:var(--text2);font-size:11.5px;margin-top:8px}.prow{display:grid;grid-template-columns:2fr .8fr 1fr 1.2fr;gap:12px;align-items:center;padding:12px;border-bottom:1px solid var(--border);font-size:12.5px;cursor:pointer}.prow:hover{background:var(--surface2)}.prow.head{color:var(--muted);font-size:11px;font-weight:700;cursor:default}.bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}.feed{list-style:none;margin:0;padding:0;display:grid;gap:10px}.feed li{border-bottom:1px solid var(--border);padding-bottom:9px}.feed li:last-child{border:0}.phys-chip{display:flex;align-items:center;gap:10px;padding:9px;border-radius:10px;background:var(--surface2);cursor:pointer}.phys-chip b,.phys-chip span{display:block}.phys-chip span{color:var(--muted);font-size:11px}.panel-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.build-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.build-card{padding:16px;cursor:pointer}.build-card:hover{box-shadow:var(--shadow)}.build-card h2{margin:8px 0 4px}.build-stats{display:flex;justify-content:space-between;gap:8px;margin-top:14px;color:var(--text2);font-size:12px}.build-detail{padding:20px}.detail-head{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center}.detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.detail-section{margin-top:16px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.field{display:grid;gap:5px;color:var(--text2);font-size:12px}.wide{grid-column:1/-1}.task-columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.task-col{padding:12px;background:var(--surface2);border-radius:12px}.task-col h3{display:flex;justify-content:space-between;margin-bottom:10px}.task{display:flex;align-items:flex-start;gap:8px;padding:9px;background:var(--surface);border:1px solid var(--border);border-radius:9px;margin-top:7px}.task .check{border:0;background:none;padding:0;color:var(--accent);font-size:17px}.task.done .task-text{text-decoration:line-through;color:var(--muted)}.task-text{flex:1;min-width:0}.task-meta{font-size:11px;color:var(--muted)}.task button.remove{border:0;background:none;color:var(--muted);font-size:16px;padding:0 3px}.timeline{list-style:none;padding:0;margin:0;display:grid;gap:8px}.timeline li{display:flex;gap:9px;align-items:center;border-bottom:1px solid var(--border);padding:8px 0}.timeline li:last-child{border:0}.timeline .grow{flex:1}.issue{border-left:3px solid var(--critical);padding:8px 11px;margin:7px 0;background:var(--surface2);border-radius:0 8px 8px 0}.issue.resolved{opacity:.65;border-color:var(--good)}.section-nav{display:flex;gap:7px;overflow-x:auto;margin:16px 0}.section-nav a{white-space:nowrap;padding:6px 10px;background:var(--surface2);border-radius:8px;font-size:12px}
+.plan-box{padding:18px;background:linear-gradient(130deg,color-mix(in srgb,var(--accent) 8%,var(--surface)),var(--surface))}.plan-head{display:flex;justify-content:space-between;align-items:center;gap:14px}.plan-head h2{margin:4px 0}.plan-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:13px}.plan-item{display:flex;gap:9px;align-items:center;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}.plan-item span{flex:1}.plan-item button{border:0;background:none;color:var(--accent);font-size:16px}.plan-add{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.plan-add input:first-child{flex:1}.plan-message{color:var(--muted);font-size:12px;margin-top:9px}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.yt-kpi{padding:15px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}.yt-kpi b,.yt-kpi span{display:block}.yt-kpi b{font-size:21px}.yt-kpi span{font-size:12px;color:var(--text2)}.yt-banner{padding:14px;margin:15px 0;color:var(--text2);display:flex;gap:10px}.chart-placeholder{height:190px;display:flex;align-items:flex-end;gap:10px;padding:15px 22px;border-bottom:1px solid var(--grid);background:repeating-linear-gradient(to bottom,transparent 0 45px,var(--grid) 46px,var(--grid) 47px)}.chart-placeholder i{flex:1;background:var(--surface3);border-radius:5px 5px 0 0;height:12%}.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.settings-card{padding:18px}.settings-card h2{margin-bottom:8px}.settings-card p{color:var(--text2);font-size:13px;margin-bottom:12px}.modal{position:fixed;inset:0;z-index:10;background:rgba(5,8,12,.45);display:grid;place-items:center;padding:15px}.modal-card{width:min(600px,100%);max-height:90vh;overflow:auto;background:var(--surface);border-radius:16px;padding:21px;box-shadow:0 20px 60px rgba(0,0,0,.25)}.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}.modal-card form{display:grid;gap:12px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:10px 16px;background:var(--text);color:var(--surface);border-radius:10px;z-index:30;box-shadow:var(--shadow);max-width:90vw}.warning{padding:11px;border-radius:9px;background:color-mix(in srgb,var(--warning) 14%,var(--surface));color:var(--text2);font-size:12px}.status-active{color:var(--accent)}.status-blocked{color:var(--critical)}.status-completed{color:var(--good)}.status-paused{color:var(--muted)}
+@media(max-width:1050px){.hero-grid{grid-template-columns:185px 1fr}.hero-donut{display:none}.hero-lower{grid-template-columns:1fr 1fr}.hero-lower>div:last-child{grid-column:1/-1}.focus-grid{grid-template-columns:1fr 1fr}.focus-grid>.card:last-child{grid-column:1/-1}.pgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.build-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.topbar{gap:8px;padding:9px 12px}.brand{margin-right:auto}.top-actions{margin-left:0}.tabs{order:3;width:100%}.top-actions .optional{display:none}.app{padding:19px 13px 40px}.page-head{align-items:flex-start}h1{font-size:24px}.hero{padding:14px}.hero-grid{grid-template-columns:1fr;gap:15px}.hero-ring{display:flex;justify-content:center}.ring{--size:104px}.hero-tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.stat-tile{min-height:68px;padding:9px}.stat-tile b{font-size:19px}.hero-lower{grid-template-columns:1fr;gap:17px}.hero-lower>div:last-child{grid-column:auto}.focus-grid,.bottom-grid,.grid2,.settings-grid{grid-template-columns:1fr}.focus-grid>.card:last-child{grid-column:auto}.pgrid,.build-grid{grid-template-columns:1fr}.toolbar{align-items:stretch}.search{min-width:100%}.toolbar select{flex:1}.seg{max-width:100%;overflow-x:auto}.plan-head{align-items:flex-start;flex-direction:column}.plan-list{grid-template-columns:1fr}.task-columns{grid-template-columns:1fr}.detail-head{grid-template-columns:1fr;justify-items:center;text-align:center}.detail-actions{justify-content:center}.form-grid{grid-template-columns:1fr}.wide{grid-column:auto}.stats-grid{grid-template-columns:repeat(2,1fr)}.prow{grid-template-columns:1fr 1fr}.prow.head{display:none}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/"><span class="logo" aria-hidden="true">◌</span><span>Project Tracker</span></a>
+  <nav class="tabs" aria-label="Sections">
+    <button data-page="dashboard">Dashboard</button><button data-page="physical">Physical</button><button data-page="yt">YT Dashboard</button>
+  </nav>
+  <div class="top-actions">
+    <button class="btn optional" data-action="new-project">＋ New project</button>
+    <button class="icon-btn" data-page="settings" title="Data & settings" aria-label="Data and settings">⚙</button>
+    <button class="icon-btn" data-action="theme" title="Toggle light / dark" aria-label="Toggle theme">◐</button>
+  </div>
+</header>
+<main id="app" class="app" aria-live="polite"></main>
+<div id="overlay"></div>
+<div id="toast" class="toast" hidden role="status"></div>
+<script>
+(() => {
+"use strict";
+const STORAGE_KEY = "project-tracker-artifact-v1";
+const PHASES = ["Idea","Planning","Design","Development","Testing","Deployment","Maintenance"];
+const STATUSES = ["Active","Blocked","Paused","Completed"];
+const PRIORITIES = ["High","Medium","Low"];
+const TYPES = ["App","Website","SaaS","Internal Tool","E-commerce","Automation","Game","Library","Other"];
+const COLORS = ["#6e98d4","#e27a4b","#42a58a","#c9983e","#ba759a","#63a58a","#8174c5","#d26c6c"];
+const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = (v) => /^https?:\/\//i.test(String(v || "")) ? String(v) : "";
+const id = () => "u-" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const today = () => new Date().toISOString().slice(0,10);
+const fmt = (n) => Number(n || 0).toLocaleString();
+const money = (n) => "$" + Number(n || 0).toLocaleString(undefined,{maximumFractionDigits:0});
+const emptyTask = (title,status="todo",priority="medium") => ({id:id(),title,detail:"",status,priority,source:"user",updatedAt:new Date().toISOString()});
+function demoData(){
+  const now = new Date().toISOString();
+  return {
+    version:1, updatedAt:now, theme:"light",
+    projects:[
+      {id:"atlas-notes",name:"Atlas Notes",oneLiner:"A calm workspace for research and ideas.",description:"A lightweight notes app focused on searchable collections, a distraction-free editor, and reliable exports.",type:"App",status:"Active",phase:"Development",progress:48,priority:"High",health:78,targetDate:"2026-12-15",technologies:["React","TypeScript","SQLite"],notes:"Synthetic example project. Replace or remove this data.",goals:["Ship a useful first release","Make notes easy to search"],tasks:[emptyTask("Finish searchable collections","doing","high"),emptyTask("Add Markdown export","todo","medium"),emptyTask("Test keyboard navigation","todo","high"),emptyTask("Set up first release checklist","done","medium")],milestones:[{id:id(),title:"Core editor works",status:"done",due:"2026-09-18"},{id:id(),title:"Private beta",status:"todo",due:"2026-11-22"}],blockers:[],bugs:[],createdAt:"2026-05-02",updatedAt:now},
+      {id:"brightside-shop",name:"Brightside Shop",oneLiner:"A small storefront for handmade goods.",description:"An independent shop concept with a curated catalog, clear product stories, and a simple checkout journey.",type:"E-commerce",status:"Blocked",phase:"Testing",progress:77,priority:"High",health:62,targetDate:"2026-10-30",technologies:["Shopify","Liquid","Stripe"],notes:"Synthetic example. No store, customer, payment, or production information is connected.",tasks:[emptyTask("Resolve mobile checkout layout","doing","high"),emptyTask("Review return policy copy","todo","medium"),emptyTask("Run checkout test cases","todo","high"),emptyTask("Confirm catalog photography","done","low")],milestones:[{id:id(),title:"Catalog ready",status:"done",due:"2026-09-15"},{id:id(),title:"Checkout tested",status:"todo",due:"2026-10-25"}],blockers:[{id:id(),title:"Payment sandbox credentials needed",detail:"Example blocker only; credentials must never be added to this Artifact.",status:"open"}],bugs:[],createdAt:"2026-03-14",updatedAt:now},
+      {id:"orbit-habits",name:"Orbit Habits",oneLiner:"A friendly habit tracker with small daily wins.",description:"A mobile-first concept for building sustainable routines through small goals and helpful visual feedback.",type:"Website",status:"Active",phase:"Design",progress:28,priority:"Medium",health:84,targetDate:"2027-01-12",technologies:["HTML","CSS","JavaScript"],notes:"",tasks:[emptyTask("Choose the weekly check-in flow","doing","medium"),emptyTask("Create accessible streak view","todo","high"),emptyTask("Write onboarding text","todo","low")],milestones:[{id:id(),title:"First clickable prototype",status:"todo",due:"2026-11-08"}],blockers:[],bugs:[{id:id(),title:"Contrast needs review",detail:"Example issue: verify text and status colors.",priority:"medium",status:"open"}],createdAt:"2026-06-07",updatedAt:now},
+      {id:"workshop-planner",name:"Workshop Planner",oneLiner:"A planning tool for hands-on weekend builds.",description:"A small utility for collecting project ideas, materials, milestones, and build notes in one place.",type:"Internal Tool",status:"Paused",phase:"Planning",progress:16,priority:"Low",health:71,targetDate:"",technologies:["Python","SQLite"],notes:"",tasks:[emptyTask("List the most common build categories","todo","low")],milestones:[],blockers:[],bugs:[],createdAt:"2026-04-20",updatedAt:now}
+    ],
+    physical:[
+      {id:id(),name:"Mini quadcopter",category:"Drone",status:"active",description:"Synthetic example build log for a small quadcopter.",budget:450,color:2,milestones:[{id:id(),title:"Choose frame and parts",done:true},{id:id(),title:"Assemble and wire",done:false},{id:id(),title:"Bench test safely",done:false}],updates:[{id:id(),day:"2026-09-14",progress:30,note:"Parts list drafted (example).",hours:2,cost:20}],target_date:"2026-12-01"},
+      {id:id(),name:"Desk organizer",category:"3D Printing",status:"planning",description:"A custom organizer, modeled and printed in a few iterations.",budget:60,color:5,milestones:[{id:id(),title:"Measure desk",done:true},{id:id(),title:"Print first draft",done:false}],updates:[],target_date:""},
+      {id:id(),name:"Garden sensor",category:"Electronics",status:"paused",description:"A small environmental sensor prototype.",budget:90,color:3,milestones:[{id:id(),title:"Pick sensor",done:false},{id:id(),title:"Test enclosure",done:false}],updates:[],target_date:""}
+    ],
+    planTasks:[], analytics: null, ui:{q:"",status:"all",type:"all",sort:"updated",view:"grid"}, page:"dashboard", projectId:null, physicalId:null
+  };
+}
+function safeLoad(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw)return demoData();
+    const parsed=JSON.parse(raw);
+    if(!parsed||!Array.isArray(parsed.projects)||!Array.isArray(parsed.physical))return demoData();
+    return {...demoData(),...parsed,ui:{...demoData().ui,...(parsed.ui||{})}};
+  }catch(_){return demoData();}
+}
+let state=safeLoad(), toastTimer=0, searchTimer=0;
+function persist(){
+  state.updatedAt=new Date().toISOString();
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state));}catch(_){showToast("Browser storage is unavailable; export a JSON backup to keep your changes.");}
+}
+function showToast(text){
+  const t=document.getElementById("toast");t.textContent=text;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.hidden=true,2800);
+}
+function ring(value,size=76,color="var(--accent)",label="complete"){
+  const v=Math.max(0,Math.min(100,Number(value)||0));
+  return `<div class="ring" style="--size:${size}px;--pct:${v};--ring-color:${color};--thickness:${Math.max(7,Math.round(size*.095))}px" role="img" aria-label="${v}% ${label}"><div class="ring-center"><b style="font-size:${Math.max(17,Math.round(size*.22))}px">${v}%</b><span>${label}</span></div></div>`;
+}
+function projectStats(){
+  const ps=state.projects, live=ps.filter(p=>p.status!=="Paused"), tasks=ps.flatMap(p=>p.tasks||[]);
+  const statusCounts=Object.fromEntries(STATUSES.map(s=>[s,ps.filter(p=>p.status===s).length]));
+  return {total:ps.length,active:ps.filter(p=>p.status==="Active"||p.status==="Blocked").length,
+    overall:live.length?Math.round(live.reduce((a,p)=>a+(+p.progress||0),0)/live.length):0,
+    blocked:statusCounts.Blocked,completed:statusCounts.Completed,paused:statusCounts.Paused,
+    inDevelopment:ps.filter(p=>["Design","Development","Testing","Deployment"].includes(p.phase)&&["Active","Blocked"].includes(p.status)).length,
+    close:ps.filter(p=>p.status!=="Completed"&&p.status!=="Paused"&&p.progress>=75).length,
+    openTasks:tasks.filter(t=>t.status!=="done").length,doneTasks:tasks.filter(t=>t.status==="done").length,totalTasks:tasks.length,
+    highTasks:tasks.filter(t=>t.status!=="done"&&t.priority==="high").length,statusCounts};
+}
+function sortProjects(ps){
+  const u=state.ui,q=(u.q||"").trim().toLowerCase();
+  const sorts={updated:(a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||""),progress:(a,b)=>b.progress-a.progress,priority:(a,b)=>PRIORITIES.indexOf(a.priority)-PRIORITIES.indexOf(b.priority),health:(a,b)=>(b.health??-1)-(a.health??-1),phase:(a,b)=>PHASES.indexOf(b.phase)-PHASES.indexOf(a.phase),name:(a,b)=>a.name.localeCompare(b.name)};
+  return ps.filter(p=>u.status==="all"||(u.status==="active"?p.status==="Active"||p.status==="Blocked":u.status==="close"?p.status!=="Completed"&&p.progress>=75:p.status===u.status))
+    .filter(p=>u.type==="all"||p.type===u.type)
+    .filter(p=>!q||[p.name,p.oneLiner,p.type,p.phase,...(p.technologies||[])].join(" ").toLowerCase().includes(q))
+    .slice().sort(sorts[u.sort]||sorts.updated);
+}
+function nextUp(n=6){
+  const rows=[];
+  state.projects.filter(p=>p.status==="Active"||p.status==="Blocked").forEach(p=>{
+    (p.tasks||[]).filter(t=>t.status!=="done").forEach(t=>{
+      const pw=3-PRIORITIES.indexOf(p.priority),tw=2-PRIORITIES.indexOf((t.priority||"medium").replace(/^./,c=>c.toUpperCase()));
+      rows.push({p,t,score:pw*10+(t.status==="doing"?6:0)+Math.max(0,tw)*2+(p.progress||0)/25});
+    });
+  });
+  rows.sort((a,b)=>b.score-a.score);
+  const used={};const picked=rows.filter(x=>(used[x.p.id]=(used[x.p.id]||0)+1)<=2).slice(0,n);
+  const personal=state.planTasks.filter(t=>t.status!=="done").slice(0,n).map(t=>({p:{id:"inbox",name:"Personal list"},t,score:0}));
+  return [...picked.slice(0,Math.max(0,n-personal.length)),...personal];
+}
+function pill(text,cls=""){return `<span class="chip ${cls}">${esc(text)}</span>`}
+function projectCard(p){
+  const color=COLORS[Math.abs(p.name.split("").reduce((a,c)=>a+c.charCodeAt(0),0))%COLORS.length];
+  const taskDone=(p.tasks||[]).filter(t=>t.status==="done").length, total=(p.tasks||[]).length;
+  return `<article class="card project-card" data-action="open-project" data-id="${esc(p.id)}" tabindex="0" role="button" aria-label="Open ${esc(p.name)}">
+    <div class="pc-head"><div class="pc-icon" style="--tc:${color}">${esc(p.name.slice(0,1).toUpperCase())}</div><div><h3>${esc(p.name)}</h3><p>${esc(p.oneLiner||p.description||"No description yet.")}</p></div></div>
+    <div class="pc-badges">${pill(p.type)}${pill(p.status,"status")}${pill(p.priority+" priority",p.priority==="High"?"high":"")}</div>
+    ${ring(p.progress,56,color,"done")}
+    <div class="progress-track" aria-label="Progress"><i style="width:${Math.max(0,Math.min(100,p.progress))}%;background:${color}"></i></div>
+    <div class="pc-foot"><span>${esc(p.phase)} · ${taskDone}/${total} tasks</span><b>${p.progress}%</b></div></article>`;
+}
+function projectList(p){
+  return `<div class="prow" data-action="open-project" data-id="${esc(p.id)}" tabindex="0"><b>${esc(p.name)}</b><span>${esc(p.type)}</span><span>${esc(p.phase)}</span><span>${p.progress}% · ${esc(p.status)}</span></div>`;
+}
+function panel(title,body,extra=""){
+  return `<section class="card panel"><header class="panel-head"><h2>${title}</h2>${extra}</header>${body}</section>`;
+}
+function dashboard(){
+  const s=projectStats(), ps=state.projects, show=sortProjects(ps), maxType=Math.max(1,...TYPES.map(t=>ps.filter(p=>p.type===t).length));
+  const statusColors={Active:"var(--accent)",Blocked:"var(--critical)",Paused:"var(--muted)",Completed:"var(--good)"};
+  const next=nextUp(5);
+  const attention=ps.flatMap(p=>[...(p.blockers||[]).filter(x=>x.status==="open").map(x=>({p,title:x.title,kind:"Blocker"})),...(p.bugs||[]).filter(x=>x.status==="open"&&x.priority==="high").map(x=>({p,title:x.title,kind:"Bug"}))]).slice(0,5);
+  const almost=ps.filter(p=>p.status!=="Completed"&&p.status!=="Paused"&&p.progress>=60).sort((a,b)=>b.progress-a.progress).slice(0,4);
+  const milestones=ps.flatMap(p=>(p.milestones||[]).filter(m=>m.status!=="done").map(m=>({p,m}))).slice(0,5);
+  const phaseHtml=PHASES.map((ph,i)=>{const n=ps.filter(p=>p.phase===ph).length;return `<div class="col"><b>${n}</b><div class="col-track"><i class="col-bar" style="height:${Math.max(2,n/Math.max(1,ps.length)*100)}%;background:${["#86b6ef","#6da7ec","#5598e7","#3987e5","#2a78d6","#1c5cab","#184f95"][i]}"></i></div><span class="col-label">${esc(ph)}</span></div>`}).join("");
+  const typeRows=TYPES.map((t,i)=>({t,n:ps.filter(p=>p.type===t).length,i})).filter(x=>x.n).map(x=>`<div class="bar-row"><span>${esc(x.t)}</span><span class="bar-track"><i style="width:${x.n/maxType*100}%;background:${COLORS[x.i%COLORS.length]}"></i></span><b>${x.n}</b></div>`).join("");
+  return `<div class="page-head"><div><div class="eyebrow">◈ Command center</div><h1>What you're building</h1><p>${s.total} digital projects · ${s.active} active · ${fmt(s.openTasks)} open tasks</p></div></div>
+  ${planner()}
+  <section class="hero card" aria-label="Portfolio overview"><div class="hero-grid">
+    <div class="hero-ring">${ring(s.overall,170,"var(--accent)","portfolio")}<div class="hero-ring-foot"><span>◉ Avg health <b>${ps.length?Math.round(ps.reduce((a,p)=>a+(p.health||0),0)/ps.length):"–"}</b></span></div></div>
+    <div class="hero-tiles">
+      ${tile("Active projects",s.active,"active")} ${tile("In development",s.inDevelopment,"all")} ${tile("Almost done",s.close,"close")} ${tile("Blocked",s.blocked,"Blocked")}
+      ${tile("Completed",s.completed,"Completed")} ${tile("Open tasks",s.openTasks)} ${tile("Tasks done",s.doneTasks)} ${tile("High-priority tasks",s.highTasks)}
+    </div><div class="hero-donut"><h3>Project status</h3><div class="legend vertical">${STATUSES.map(st=>`<li><i class="sw" style="background:${statusColors[st]}"></i>${st}<b>${s.statusCounts[st]}</b></li>`).join("")}</div></div>
+  </div><div class="hero-lower"><div><h3>Lifecycle stage</h3><div class="cols">${phaseHtml}</div></div>
+    <div><h3>Task completion by project</h3><div class="bar-list">${ps.filter(p=>p.tasks.length).slice(0,5).map(p=>{let c=p.tasks.filter(t=>t.status==="done").length;return `<div class="bar-row"><span>${esc(p.name)}</span><span class="bar-track"><i style="width:${c/Math.max(1,p.tasks.length)*100}%"></i></span><b>${c}/${p.tasks.length}</b></div>`}).join("")||`<div class="empty">Add tasks to see completion.</div>`}</div></div>
+    <div><h3>Project types</h3><div class="bar-list">${typeRows||`<div class="empty">No projects yet.</div>`}</div></div>
+  </div></section>
+  <div class="focus-grid">
+    ${panel("Work on next",next.length?`<ol class="list">${next.map((x,i)=>`<li><span class="number">${i+1}</span><div class="list-main"><div class="list-title">${esc(x.t.title)}</div><div class="list-meta"><a href="#/project/${encodeURIComponent(x.p.id)}">${esc(x.p.name)}</a>${pill(x.t.priority||"medium")}${x.t.status==="doing"?pill("In progress","status"):""}</div></div></li>`).join("")}</ol>`:`<div class="empty">Add tasks to see suggestions.</div>`)}
+    ${panel("Needs attention",attention.length?`<ul class="list">${attention.map(x=>`<li><span class="number" style="color:var(--critical)">!</span><div class="list-main"><div class="list-title">${esc(x.title)}</div><div class="list-meta">${esc(x.p.name)} · ${x.kind}</div></div></li>`).join("")}</ul>`:`<div class="empty">Nothing needs attention right now.</div>`)}
+    <div class="stack">${panel("Almost finished",almost.length?`<div class="mini-list">${almost.map(p=>`<a class="mini-row" href="#/project/${encodeURIComponent(p.id)}"><span>${esc(p.name)}</span><span class="bar-track"><i style="width:${p.progress}%"></i></span><b>${p.progress}%</b></a>`).join("")}</div>`:`<div class="empty">No project is past 60% yet.</div>`)}
+      ${panel("Upcoming milestones",milestones.length?`<ul class="list">${milestones.map(x=>`<li><span class="number">⚑</span><div class="list-main"><div class="list-title">${esc(x.m.title)}</div><div class="list-meta">${esc(x.p.name)} · ${x.m.due?esc(x.m.due):"No due date"}</div></div></li>`).join("")}</ul>`:`<div class="empty">No milestones yet.</div>`)}</div>
+  </div>
+  <section class="section" id="projects"><div class="section-title"><h2>▦ Digital projects <span class="count">${show.length}</span></h2><button class="btn primary" data-action="new-project">＋ Add project</button></div>
+    <div class="toolbar"><input class="search" data-action="search" type="search" placeholder="Search projects, tech, phase…" value="${esc(state.ui.q)}" aria-label="Search projects">
+      <div class="seg">${["all","active","Blocked","close","Paused","Completed"].map(k=>`<button class="${state.ui.status===k?"on":""}" data-action="filter-status" data-value="${k}">${k==="all"?"All":k==="active"?"Active":k==="close"?"Almost done":k}<span>${k==="all"?ps.length:k==="active"?s.active:k==="close"?s.close:ps.filter(p=>p.status===k).length}</span></button>`).join("")}</div>
+      <select data-action="filter-type" aria-label="Filter by type"><option value="all">All types</option>${[...new Set(ps.map(p=>p.type))].map(t=>`<option ${state.ui.type===t?"selected":""}>${esc(t)}</option>`).join("")}</select>
+      <select data-action="sort"><option value="updated" ${state.ui.sort==="updated"?"selected":""}>Sort: Recently updated</option><option value="progress" ${state.ui.sort==="progress"?"selected":""}>Sort: Progress</option><option value="priority" ${state.ui.sort==="priority"?"selected":""}>Sort: Priority</option><option value="health" ${state.ui.sort==="health"?"selected":""}>Sort: Health</option><option value="phase" ${state.ui.sort==="phase"?"selected":""}>Sort: Lifecycle stage</option><option value="name" ${state.ui.sort==="name"?"selected":""}>Sort: Name</option></select>
+      <div class="seg"><button class="${state.ui.view==="grid"?"on":""}" data-action="view" data-value="grid" aria-label="Grid view">▦</button><button class="${state.ui.view==="list"?"on":""}" data-action="view" data-value="list" aria-label="List view">☷</button></div></div>
+    ${show.length?(state.ui.view==="grid"?`<div class="pgrid">${show.map(projectCard).join("")}</div>`:`<div class="card"><div class="prow head"><b>Project</b><span>Type</span><span>Stage</span><span>Progress · status</span></div>${show.map(projectList).join("")}</div>`):`<div class="empty">No projects match these filters.</div>`}
+  </section>
+  <div class="bottom-grid">${panel("Recently completed",ps.flatMap(p=>p.tasks.filter(t=>t.status==="done").map(t=>({p,t}))).slice(0,6).map(x=>`<div class="feed">${esc(x.t.title)} <span class="muted">· ${esc(x.p.name)}</span></div>`).join("")||`<div class="empty">Completed tasks show up here.</div>`)}
+    ${panel("Physical builds",state.physical.slice(0,4).map(p=>`<a class="phys-chip" href="#/physical/${p.id}">${ring(p.progress,44,COLORS[p.color%8],"")}<div><b>${esc(p.name)}</b><span>${esc(p.category)} · ${(p.milestones||[]).filter(m=>m.done).length}/${(p.milestones||[]).length} milestones</span></div></a>`).join("")||`<div class="empty">No physical builds yet.</div>`, `<a class="btn small" href="#/physical">All builds</a>`)}</div>`;
+}
+function tile(label,value,filter=""){
+  return `<button class="stat-tile" ${filter?`data-action="quick-filter" data-value="${filter}"`: ""}><span class="st-label">${label}</span><b>${fmt(value)}</b></button>`;
+}
+function planner(){
+  const tasks=nextUp(4);
+  const progress=tasks.length?Math.round(tasks.filter(x=>x.t.status==="done").length/tasks.length*100):0;
+  return `<section class="plan-box card"><div class="plan-head"><div><div class="eyebrow">◎ Today's focus · ${new Date().toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"})} <span class="chip">Rules-based</span></div><h2>${tasks.length?"Make progress on your highest-priority work":"No open tasks to plan yet"}</h2><p class="muted small">A deterministic shortlist from project priority, task status, and progress. No AI service is called.</p></div>${ring(progress,72,"var(--accent)","done")}</div>
+  ${tasks.length?`<div class="plan-list">${tasks.map(x=>`<div class="plan-item"><button aria-label="Complete ${esc(x.t.title)}" data-action="toggle-task" data-project="${esc(x.p.id)}" data-id="${esc(x.t.id)}">${x.t.status==="done"?"✓":"○"}</button><span><b>${esc(x.t.title)}</b><small> · ${esc(x.p.name)}</small></span>${pill(x.t.priority||"medium")}</div>`).join("")}</div>`:`<div class="empty">Create or import a project with tasks to get started.</div>`}
+  <form class="plan-add" data-form="add-plan"><input name="title" placeholder="Add a task to today's list" required maxlength="200"><select name="project"><option value="">No project</option>${state.projects.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}</select><button class="btn" type="submit">＋ Add task</button><button class="btn small" type="button" data-action="regenerate">Refresh suggestions</button></form></section>`;
+}
+function projectDetail(p){
+  if(!p)return `<a href="#/">← Dashboard</a><div class="empty">Project not found.</div>`;
+  const color=COLORS[Math.abs(p.name.split("").reduce((a,c)=>a+c.charCodeAt(0),0))%COLORS.length];
+  const groups=[["doing","In progress"],["todo","Up next"],["done","Completed"]];
+  return `<a href="#/" class="small">← Dashboard</a><section class="card panel detail-section"><div class="detail-head">${ring(p.progress,142,color,"complete")}<div><div class="pc-badges">${pill(p.type)}${pill(p.status,"status")}${pill(p.priority+" priority",p.priority==="High"?"high":"")}</div><h1>${esc(p.name)}</h1><p class="muted">${esc(p.oneLiner||"No description yet.")}</p><div class="detail-actions"><button class="btn primary" data-action="edit-project" data-id="${esc(p.id)}">✎ Edit details</button><button class="btn" data-action="delete-project" data-id="${esc(p.id)}">Hide / remove</button>${safeUrl(p.githubUrl)?`<a class="btn" href="${safeUrl(p.githubUrl)}" target="_blank" rel="noopener noreferrer">GitHub ↗</a>`:""}</div></div></div>
+    <div class="grid3 section"><div><small>Lifecycle stage</small><b>${esc(p.phase)}</b></div><div><small>Health</small><b>${p.health??"–"} / 100</b></div><div><small>Target</small><b>${p.targetDate?esc(p.targetDate):"Not set"}</b></div></div></section>
+  <nav class="section-nav">${["overview","tasks","milestones","issues"].map(x=>`<a href="#sec-${x}" data-section="sec-${x}">${x[0].toUpperCase()+x.slice(1)}</a>`).join("")}</nav>
+  <section class="grid2 detail-section" id="sec-overview">${panel("Description",`<p>${esc(p.description||"No description yet.")}</p><h3 class="section">Technologies</h3><div class="pc-badges">${(p.technologies||[]).map(t=>pill(t)).join("")||"Unknown"}</div>`)}
+  ${panel("Goals & important notes",`<form class="plan-add" data-form="add-goal" data-project="${esc(p.id)}"><input name="title" placeholder="Add a goal" required><button class="btn">＋ Add</button></form><ul class="timeline section">${(p.goals||[]).map((g,i)=>`<li><span class="grow">${esc(g)}</span><button class="btn small" data-action="remove-goal" data-project="${esc(p.id)}" data-index="${i}">×</button></li>`).join("")||`<li class="muted">No goals yet.</li>`}</ul><label class="field section">Notes<textarea data-action="notes" data-project="${esc(p.id)}" placeholder="Decisions, ideas, reminders…">${esc(p.notes||"")}</textarea><span class="small">Saved automatically when you leave the field.</span></label>`)}</section>
+  <section id="sec-tasks" class="detail-section">${panel("Tasks",`<form class="plan-add" data-form="add-project-task" data-project="${esc(p.id)}"><input name="title" placeholder="Add a task…" required><select name="priority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select><button class="btn primary">＋ Add</button></form><div class="task-columns section">${groups.map(([st,label])=>{const items=p.tasks.filter(t=>t.status===st);return `<div class="task-col"><h3>${label}<span>${items.length}</span></h3>${items.map(t=>`<div class="task ${st==="done"?"done":""}"><button class="check" data-action="toggle-task" data-project="${esc(p.id)}" data-id="${esc(t.id)}">${st==="done"?"✓":"○"}</button><div class="task-text"><b>${esc(t.title)}</b>${t.detail?`<div class="task-meta">${esc(t.detail)}</div>`:""}<div class="task-meta">${esc(t.priority||"medium")} priority</div></div><button class="remove" data-action="delete-task" data-project="${esc(p.id)}" data-id="${esc(t.id)}" aria-label="Remove task">×</button></div>`).join("")||`<div class="empty">Nothing here</div>`}</div>`}).join("")}</div>`)}</section>
+  <section id="sec-milestones" class="detail-section">${panel("Milestones",`<form class="plan-add" data-form="add-milestone" data-project="${esc(p.id)}"><input name="title" placeholder="Add a milestone" required><input name="due" type="date"><button class="btn">＋ Add</button></form><ul class="timeline section">${p.milestones.map(m=>`<li><button class="btn small" data-action="toggle-milestone" data-project="${esc(p.id)}" data-id="${esc(m.id)}">${m.status==="done"?"✓":"○"}</button><span class="grow ${m.status==="done"?"muted":""}">${esc(m.title)}</span><small>${m.due?esc(m.due):""}</small><button class="btn small" data-action="delete-milestone" data-project="${esc(p.id)}" data-id="${esc(m.id)}">×</button></li>`).join("")||`<li class="muted">No milestones yet.</li>`}</ul>`)}</section>
+  <section id="sec-issues" class="grid2 detail-section">${["blockers","bugs"].map(kind=>panel(kind==="bugs"?"Bugs & issues":"Blockers",`<form class="plan-add" data-form="add-issue" data-project="${esc(p.id)}" data-kind="${kind}"><input name="title" placeholder="${kind==="bugs"?"Describe a bug":"What's stopping progress?"}" required><button class="btn">＋ Add</button></form>${(p[kind]||[]).map(x=>`<div class="issue ${x.status==="resolved"?"resolved":""}"><b>${esc(x.title)}</b><p class="small">${esc(x.detail||"")}</p><div class="plan-add"><button class="btn small" data-action="toggle-issue" data-project="${esc(p.id)}" data-kind="${kind}" data-id="${esc(x.id)}">${x.status==="resolved"?"Reopen":"Resolve"}</button><button class="btn small" data-action="delete-issue" data-project="${esc(p.id)}" data-kind="${kind}" data-id="${esc(x.id)}">Remove</button></div></div>`).join("")||`<div class="empty">Nothing here yet.</div>`}`)).join("")}</section>`;
+}
+function physicalView(){
+  if(state.physicalId){
+    const p=state.physical.find(x=>x.id===state.physicalId);
+    if(!p)return `<button class="btn" data-action="back-physical">← Physical builds</button><div class="empty">Build not found.</div>`;
+    const done=p.milestones.filter(m=>m.done).length, progress=p.updates.find(u=>u.progress!=null)?.progress??(p.milestones.length?Math.round(done/p.milestones.length*100):0);
+    const hours=p.updates.reduce((a,u)=>a+(+u.hours||0),0),spent=p.updates.reduce((a,u)=>a+(+u.cost||0),0);
+    return `<a href="#/physical" class="small">← Physical builds</a><section class="card build-detail detail-section"><div class="detail-head">${ring(progress,140,COLORS[p.color%8],"complete")}<div><div class="pc-badges">${pill(p.category)}${pill(p.status)}</div><h1>${esc(p.name)}</h1><p class="muted">${esc(p.description||"")}</p><div class="detail-actions"><button class="btn" data-action="edit-build" data-id="${esc(p.id)}">✎ Edit</button><button class="btn danger" data-action="delete-build" data-id="${esc(p.id)}">Delete</button></div></div></div><div class="grid3 section"><div><small>Milestones</small><b>${done}/${p.milestones.length}</b></div><div><small>Hours logged</small><b>${fmt(hours)}</b></div><div><small>Spent / budget</small><b>${money(spent)} / ${p.budget?money(p.budget):"–"}</b></div></div></section>
+    <div class="grid2 section"><section class="card panel"><header class="panel-head"><h2>Log progress</h2></header><form class="form-grid" data-form="build-update" data-id="${esc(p.id)}"><label class="field wide">How far along?<input name="progress" type="range" min="0" max="100" step="5" value="${progress}"></label><label class="field wide">What did you do?<textarea name="note" required placeholder="Describe the update"></textarea></label><label class="field">Date<input name="day" type="date" value="${today()}"></label><label class="field">Hours<input name="hours" type="number" min="0" step=".25" value="0"></label><label class="field">Cost ($)<input name="cost" type="number" min="0" step=".01" value="0"></label><div class="wide"><button class="btn primary">Save update</button></div></form></section>
+    ${panel("Milestones",`<form class="plan-add" data-form="add-build-milestone" data-id="${esc(p.id)}"><input name="title" placeholder="Add a milestone" required><button class="btn">＋ Add</button></form><ul class="timeline section">${p.milestones.map(m=>`<li><button class="btn small" data-action="toggle-build-milestone" data-id="${esc(m.id)}">${m.done?"✓":"○"}</button><span class="grow">${esc(m.title)}</span><button class="btn small" data-action="delete-build-milestone" data-id="${esc(m.id)}">×</button></li>`).join("")||`<li class="muted">No milestones yet.</li>`}</ul>`)}</div>
+    <div class="grid2 section">${panel("Build log",p.updates.map(u=>`<div class="feed"><b>${esc(u.note)}</b><div class="small muted">${esc(u.day)} · ${u.progress==null?"":u.progress+"% · "}${fmt(u.hours)} h · ${money(u.cost)}</div><button class="btn small" data-action="delete-update" data-id="${esc(u.id)}">Remove</button></div>`).join("")||`<div class="empty">Nothing logged yet.</div>`)}${panel("Progress",`<div class="chart-placeholder" aria-label="Progress log">${p.updates.map(u=>`<i title="${esc(u.day)} · ${u.progress}% " style="height:${Math.max(5,u.progress||0)}%;background:${COLORS[p.color%8]}"></i>`).join("")||`<small>Log an update to see progress.</small>`}</div>`)}</div>`;
+  }
+  return `<div class="page-head"><div><div class="eyebrow">▣ Workshop</div><h1>Physical builds</h1><p>Builds and repairs you log by hand: progress, milestones, hours and money.</p></div><button class="btn primary" data-action="new-build">＋ New build</button></div>
+    <div class="build-grid">${state.physical.map(p=>{const n=p.milestones.filter(m=>m.done).length,pr=p.updates.find(u=>u.progress!=null)?.progress??(p.milestones.length?Math.round(n/p.milestones.length*100):0);return `<article class="card build-card" data-action="open-build" data-id="${esc(p.id)}"><div>${ring(pr,70,COLORS[p.color%8],"done")}</div><h2>${esc(p.name)}</h2><p class="muted">${esc(p.category)} · ${esc(p.status)}</p><div class="build-stats"><span>⚑ ${n}/${p.milestones.length}</span><span>${money(p.updates.reduce((a,u)=>a+(+u.cost||0),0))} spent</span><span>${fmt(p.updates.reduce((a,u)=>a+(+u.hours||0),0))} h</span></div></article>`}).join("")||`<div class="empty">No physical projects yet.</div>`}</div>`;
+}
+function ytView(){
+  const a=state.analytics;
+  if(!a||!Array.isArray(a.apps)||!a.apps.length)return `<div class="page-head"><div><div class="eyebrow">◷ Analytics</div><h1>YT Dashboard</h1><p>Traffic, money, and reviews per site or app.</p></div></div>
+    <div class="stats-grid">${["Visitors","Revenue","Money spent","Profit","Time on site","Rating"].map(x=>`<div class="yt-kpi"><span>${x}</span><b>N/A</b><small>No data yet</small></div>`).join("")}</div>
+    <div class="card yt-banner"><span>ⓘ</span><div><b>Nothing is connected yet.</b> There is no analytics provider or real traffic data configured in this copy. The original dashboard also shows N/A until data is supplied. To avoid inventing numbers, this prototype keeps the panels empty.</div></div>
+    ${panel("Daily visitors",`<div class="chart-placeholder">${Array.from({length:12},()=>"<i></i>").join("")}</div>`)}
+    ${panel("Revenue & audience",`<div class="empty">N/A · Importing provider data would require a trusted backend integration. Do not put analytics credentials into Artifact source code.</div>`)}`;
+  return `<div class="page-head"><div><div class="eyebrow">◷ Analytics</div><h1>YT Dashboard</h1><p>Imported, user-supplied analytics only.</p></div></div><div class="warning">Data is local to this Artifact view. Do not import confidential customer or account information.</div>`;
+}
+function settingsView(){
+  return `<div class="page-head"><div><div class="eyebrow">⚙ Preferences</div><h1>Data & settings</h1><p>Browser-side prototype controls. Import/export JSON to move your own data.</p></div></div>
+  <div class="settings-grid">
+    ${panel("Portable data",`<p>Changes are saved best-effort in this browser/Artifact context. Download JSON for a portable backup; import it on another device to bring your data there.</p><div class="plan-add"><button class="btn primary" data-action="export">↓ Export JSON</button><label class="btn">↑ Import JSON<input type="file" accept=".json,application/json" data-action="import" hidden></label></div><p class="small">Import replaces the current Artifact data after validation. Use only data you are authorized to share.</p>`)}
+    ${panel("Appearance",`<p>Choose the dashboard color scheme.</p><button class="btn" data-action="theme">◐ Switch to ${document.documentElement.dataset.theme==="dark"?"light":"dark"} mode</button>`)}
+    ${panel("Artifact limitations",`<p>This build cannot read folders, scan Git history, run the local AI CLI, capture browser screenshots, open local apps, host a database, or synchronize edits between people.</p><p>Claude's Artifact sharing controls determine who can open the published app. Anyone with access may be able to view data embedded in the Artifact or imported into their own session.</p>`)}
+    ${panel("Restore examples",`<p>Reset this view to synthetic sample projects and builds. Your current browser data will be replaced.</p><button class="btn danger" data-action="reset">Restore synthetic examples</button>`)}</div>`;
+}
+function render(){
+  const app=document.getElementById("app"),page=state.page||"dashboard";
+  const activePage=page==="project"?"dashboard":page;
+  document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===activePage));
+  if(page==="project")app.innerHTML=projectDetail(state.projects.find(p=>p.id===state.projectId));
+  else if(page==="physical")app.innerHTML=physicalView();
+  else if(page==="yt")app.innerHTML=ytView();
+  else if(page==="settings")app.innerHTML=settingsView();
+  else app.innerHTML=dashboard();
+}
+function go(page){
+  state.page=page;state.projectId=null;state.physicalId=null;
+  const hash=page==="dashboard"?"#/":page==="physical"?"#/physical":page==="yt"?"#/yt":page==="settings"?"#/settings":"#/";
+  if(location.hash!==hash)history.replaceState(null,"",hash);
+  persist();render();window.scrollTo(0,0);
+}
+function openProject(pid){state.projectId=pid;state.page="project";history.replaceState(null,"","#/project/"+encodeURIComponent(pid));persist();render();window.scrollTo(0,0)}
+function openBuild(pid){state.physicalId=pid;state.page="physical";history.replaceState(null,"","#/physical/"+encodeURIComponent(pid));persist();render();window.scrollTo(0,0)}
+function projectFor(pid){return state.projects.find(p=>p.id===pid)}
+function buildFor(pid){return state.physical.find(p=>p.id===pid)}
+function setTheme(){
+  state.theme=state.theme==="dark"?"light":"dark";document.documentElement.dataset.theme=state.theme;persist();render();
+}
+function exportData(){
+  const data={format:"project-tracker-artifact",version:1,exportedAt:new Date().toISOString(),projects:state.projects,physical:state.physical,planTasks:state.planTasks,theme:state.theme};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="project-tracker-artifact-data.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);showToast("JSON backup downloaded.");
+}
+function importData(file){
+  if(file.size>10_000_000){showToast("JSON file is larger than the 10 MB import limit.");return}
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const obj=JSON.parse(reader.result);
+      if(!obj||!Array.isArray(obj.projects)||!Array.isArray(obj.physical))throw new Error("Expected projects and physical arrays.");
+      if(obj.projects.length>500||obj.physical.length>500)throw new Error("Import is larger than the supported limit.");
+      const bounded=xs=>{if(xs.length>2000)throw new Error("An imported project has too many items.");return xs};
+      const importedProjects=obj.projects.map((raw,i)=>{
+        if(!raw||typeof raw!=="object"||!String(raw.name||"").trim())throw new Error(`Project ${i+1} needs a name.`);
+        const p={...raw,id:String(raw.id||id()).slice(0,150),name:String(raw.name).slice(0,100),oneLiner:String(raw.oneLiner||"").slice(0,300),description:String(raw.description||"").slice(0,10000),notes:String(raw.notes||"").slice(0,10000)};
+        p.status=STATUSES.includes(raw.status)?raw.status:"Active";p.phase=PHASES.includes(raw.phase)?raw.phase:"Idea";p.priority=PRIORITIES.includes(raw.priority)?raw.priority:"Medium";p.type=TYPES.includes(raw.type)?raw.type:"Other";
+        p.progress=Math.max(0,Math.min(100,Number(raw.progress)||0));p.health=raw.health==null?null:Math.max(0,Math.min(100,Number(raw.health)||0));p.targetDate=String(raw.targetDate||"").slice(0,10);p.githubUrl=safeUrl(raw.githubUrl);
+        p.technologies=bounded(Array.isArray(raw.technologies)?raw.technologies:[]).slice(0,100).map(x=>String(x).slice(0,100));
+        p.tasks=bounded(Array.isArray(raw.tasks)?raw.tasks:[]).map(t=>{if(!t||typeof t!=="object")throw new Error(`Project ${i+1} has an invalid task.`);return {id:String(t.id||id()).slice(0,150),title:String(t.title||"Untitled task").slice(0,300),detail:String(t.detail||"").slice(0,2000),status:["todo","doing","done"].includes(t.status)?t.status:"todo",priority:["high","medium","low"].includes(String(t.priority||"").toLowerCase())?String(t.priority).toLowerCase():"medium",source:"user",updatedAt:t.updatedAt||null}});
+        p.milestones=bounded(Array.isArray(raw.milestones)?raw.milestones:[]).map(m=>{if(!m||typeof m!=="object")throw new Error(`Project ${i+1} has an invalid milestone.`);return {id:String(m.id||id()).slice(0,150),title:String(m.title||"Untitled milestone").slice(0,300),due:String(m.due||"").slice(0,10),status:m.status==="done"?"done":"todo"}});
+        for(const k of ["blockers","bugs"])p[k]=bounded(Array.isArray(raw[k])?raw[k]:[]).map(x=>{if(!x||typeof x!=="object")throw new Error(`Project ${i+1} has an invalid issue.`);return {id:String(x.id||id()).slice(0,150),title:String(x.title||"Untitled issue").slice(0,300),detail:String(x.detail||"").slice(0,2000),priority:["high","medium","low"].includes(String(x.priority||"").toLowerCase())?String(x.priority).toLowerCase():"medium",status:["resolved","done"].includes(x.status)?"resolved":"open"}});
+        p.goals=bounded(Array.isArray(raw.goals)?raw.goals:[]).slice(0,200).map(x=>String(x).slice(0,500));return p;
+      });
+      const importedPhysical=obj.physical.map((raw,i)=>{
+        if(!raw||typeof raw!=="object"||!String(raw.name||"").trim())throw new Error(`Physical build ${i+1} needs a name.`);
+        return {...raw,id:String(raw.id||id()).slice(0,150),name:String(raw.name).slice(0,100),category:String(raw.category||"Other").slice(0,60),status:["planning","active","paused","done"].includes(raw.status)?raw.status:"planning",description:String(raw.description||"").slice(0,10000),budget:raw.budget==null?null:Math.max(0,Number(raw.budget)||0),color:Math.abs(Number(raw.color)||0)%8,target_date:String(raw.target_date||"").slice(0,10),milestones:bounded(Array.isArray(raw.milestones)?raw.milestones:[]).map(m=>{if(!m||typeof m!=="object")throw new Error(`Physical build ${i+1} has an invalid milestone.`);return {id:String(m.id||id()).slice(0,150),title:String(m.title||"Untitled milestone").slice(0,300),done:!!m.done}}),updates:bounded(Array.isArray(raw.updates)?raw.updates:[]).map(u=>{if(!u||typeof u!=="object")throw new Error(`Physical build ${i+1} has an invalid update.`);return {id:String(u.id||id()).slice(0,150),day:String(u.day||today()).slice(0,10),progress:u.progress==null?null:Math.max(0,Math.min(100,Number(u.progress)||0)),note:String(u.note||"").slice(0,2000),hours:Math.max(0,Number(u.hours)||0),cost:Math.max(0,Number(u.cost)||0)}})};
+      });
+      const importedPlanTasks=bounded(Array.isArray(obj.planTasks)?obj.planTasks:[]).slice(0,2000).map(t=>{
+        if(!t||typeof t!=="object")throw new Error("The imported planner contains an invalid task.");
+        return {id:String(t.id||id()).slice(0,150),title:String(t.title||"Untitled task").slice(0,300),detail:String(t.detail||"").slice(0,2000),status:["todo","doing","done"].includes(t.status)?t.status:"todo",priority:["high","medium","low"].includes(String(t.priority||"").toLowerCase())?String(t.priority).toLowerCase():"medium",projectId:null};
+      });
+      state.projects=importedProjects;state.physical=importedPhysical;state.planTasks=importedPlanTasks;state.analytics=null;state.ui={...state.ui,status:"all",type:"all",q:""};
+      state.theme=obj.theme==="dark"?"dark":"light";document.documentElement.dataset.theme=state.theme;persist();go("dashboard");showToast("JSON data imported.");
+    }catch(e){showToast("Could not import JSON: "+e.message);}
+  };
+  reader.readAsText(file);
+}
+function modal(title,body){
+  const root=document.getElementById("overlay");
+  root.innerHTML=`<div class="modal" data-action="close-modal"><section class="modal-card" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modal-head"><h2>${esc(title)}</h2><button class="icon-btn" data-action="close-modal" aria-label="Close">×</button></div>${body}</section></div>`;
+  root.querySelector("input,textarea,select")?.focus();
+}
+function editProjectForm(p){
+  const fresh=!p;p=p||{name:"",oneLiner:"",description:"",type:"App",status:"Active",phase:"Idea",progress:0,priority:"Medium",health:"",targetDate:"",technologies:[],notes:""};
+  modal(fresh?"New project":"Edit project details",`<form data-form="save-project" data-id="${fresh?"":esc(p.id)}">
+    <label class="field">Name<input name="name" required maxlength="100" value="${esc(p.name)}"></label>
+    <label class="field">One-line summary<input name="oneLiner" maxlength="180" value="${esc(p.oneLiner||"")}"></label>
+    <label class="field">Description<textarea name="description">${esc(p.description||"")}</textarea></label>
+    <label class="field">GitHub URL<input name="githubUrl" type="url" placeholder="https://github.com/…" value="${esc(p.githubUrl||"")}"></label>
+    <div class="form-grid"><label class="field">Type<select name="type">${TYPES.map(t=>`<option ${p.type===t?"selected":""}>${esc(t)}</option>`).join("")}</select></label><label class="field">Status<select name="status">${STATUSES.map(t=>`<option ${p.status===t?"selected":""}>${t}</option>`).join("")}</select></label>
+    <label class="field">Lifecycle stage<select name="phase">${PHASES.map(t=>`<option ${p.phase===t?"selected":""}>${t}</option>`).join("")}</select></label><label class="field">Priority<select name="priority">${PRIORITIES.map(t=>`<option ${p.priority===t?"selected":""}>${t}</option>`).join("")}</select></label>
+    <label class="field">Progress (%)<input name="progress" type="number" min="0" max="100" value="${Number(p.progress)||0}"></label><label class="field">Health (0–100)<input name="health" type="number" min="0" max="100" value="${p.health??""}"></label>
+    <label class="field">Target date<input name="targetDate" type="date" value="${esc(p.targetDate||"")}"></label><label class="field">Technologies <small>comma-separated</small><input name="technologies" value="${esc((p.technologies||[]).join(", "))}"></label></div>
+    <div class="modal-actions"><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn primary">Save</button></div></form>`);
+}
+function editBuildForm(p){
+  const isNew=!p;p=p||{name:"",category:"Other",status:"planning",description:"",budget:"",target_date:"",color:0};
+  modal(isNew?"New physical build":"Edit physical build",`<form data-form="save-build" data-id="${isNew?"":esc(p.id)}"><label class="field">Name<input name="name" required value="${esc(p.name)}"></label><div class="form-grid"><label class="field">Category<select name="category">${["Drone","Car","3D Printing","Electronics","Woodworking","Home","Other"].map(x=>`<option ${p.category===x?"selected":""}>${x}</option>`).join("")}</select></label><label class="field">Status<select name="status">${["planning","active","paused","done"].map(x=>`<option ${p.status===x?"selected":""}>${x}</option>`).join("")}</select></label><label class="field">Budget ($)<input name="budget" type="number" min="0" value="${p.budget??""}"></label><label class="field">Target date<input name="target_date" type="date" value="${esc(p.target_date||"")}"></label></div><label class="field">Description<textarea name="description">${esc(p.description||"")}</textarea></label><div class="modal-actions"><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn primary">Save</button></div></form>`);
+}
+function values(form){return Object.fromEntries(new FormData(form).entries())}
+function handleClick(e){
+  const b=e.target.closest("[data-action]");if(!b)return;
+  const act=b.dataset.action,pid=b.dataset.project||"",pid2=b.dataset.id||"";
+  if(act==="close-modal"){if(e.target===b||e.target.closest(".icon-btn"))document.getElementById("overlay").innerHTML="";return}
+  if(act==="theme"){setTheme();return}
+  if(act==="new-project"){editProjectForm();return}
+  if(act==="edit-project"){editProjectForm(projectFor(pid2));return}
+  if(act==="new-build"){editBuildForm();return}
+  if(act==="edit-build"){editBuildForm(buildFor(pid2));return}
+  if(act==="open-project"){openProject(pid2);return}
+  if(act==="cycle-task"){
+    const p=projectFor(b.dataset.project),t=p?.tasks.find(x=>x.id===b.dataset.id);
+    if(t){t.status=t.status==="todo"?"doing":t.status==="doing"?"done":"todo";t.updatedAt=new Date().toISOString();persist();render()}return;
+  }
+  if(act==="open-build"){openBuild(pid2);return}
+  if(act==="back-physical"){state.physicalId=null;render();return}
+  if(act==="filter-status"){state.ui.status=b.dataset.value;persist();render();return}
+  if(act==="quick-filter"){state.ui.status=b.dataset.value;state.ui.type="all";state.ui.q="";render();document.getElementById("projects")?.scrollIntoView({behavior:"smooth"});return}
+  if(act==="view"){state.ui.view=b.dataset.value;persist();render();return}
+  if(act==="toggle-task"){
+    if(b.dataset.project==="inbox"){const t=state.planTasks.find(x=>x.id===b.dataset.id);if(t){t.status=t.status==="done"?"todo":"done";persist();render()}return}
+    const p=projectFor(b.dataset.project),t=p?.tasks.find(x=>x.id===b.dataset.id);
+    if(t){t.status=t.status==="done"?"todo":t.status==="doing"?"done":"done";t.updatedAt=new Date().toISOString();persist();render()}return;
+  }
+  if(act==="delete-task"){const p=projectFor(pid);if(p){p.tasks=p.tasks.filter(t=>t.id!==pid2);persist();render()}return}
+  if(act==="toggle-milestone"){const p=projectFor(pid);const m=p?.milestones.find(x=>x.id===pid2);if(m){m.status=m.status==="done"?"todo":"done";persist();render()}return}
+  if(act==="delete-milestone"){const p=projectFor(pid);if(p){p.milestones=p.milestones.filter(x=>x.id!==pid2);persist();render()}return}
+  if(act==="toggle-issue"){const p=projectFor(pid),x=p?.[b.dataset.kind]?.find(y=>y.id===pid2);if(x){x.status=x.status==="resolved"?"open":"resolved";persist();render()}return}
+  if(act==="delete-issue"){const p=projectFor(pid);if(p){p[b.dataset.kind]=p[b.dataset.kind].filter(x=>x.id!==pid2);persist();render()}return}
+  if(act==="remove-goal"){const p=projectFor(pid);if(p){p.goals.splice(+b.dataset.index,1);persist();render()}return}
+  if(act==="toggle-build-milestone"){const m=state.physical.flatMap(x=>x.milestones).find(x=>x.id===pid2);if(m){m.done=!m.done;persist();render()}return}
+  if(act==="delete-build-milestone"){const p=state.physical.find(x=>x.milestones.some(m=>m.id===pid2));if(p){p.milestones=p.milestones.filter(m=>m.id!==pid2);persist();render()}return}
+  if(act==="delete-update"){const p=state.physical.find(x=>x.updates.some(u=>u.id===pid2));if(p){p.updates=p.updates.filter(u=>u.id!==pid2);persist();render()}return}
+  if(act==="delete-project"){const p=projectFor(pid2);if(p&&confirm(`Remove ${p.name} from this Artifact? Export first if you want a backup.`)){state.projects=state.projects.filter(x=>x.id!==pid2);state.page="dashboard";state.projectId=null;persist();render()}return}
+  if(act==="delete-build"){const p=buildFor(pid2);if(p&&confirm(`Remove ${p.name}?`)){state.physical=state.physical.filter(x=>x.id!==pid2);state.physicalId=null;persist();render()}return}
+  if(act==="regenerate"){render();showToast("Suggestions refreshed from current project tasks.");return}
+  if(act==="export"){exportData();return}
+  if(act==="reset"){if(confirm("Replace this Artifact data with synthetic examples? Export a backup first if needed.")){state=demoData();document.documentElement.dataset.theme=state.theme;persist();go("dashboard");showToast("Synthetic examples restored.")}return}
+  if(act==="delete-build-milestone")return;
+}
+function handleSubmit(e){
+  const form=e.target.closest("form[data-form]");if(!form)return;e.preventDefault();
+  const data=values(form),kind=form.dataset.form,pid=form.dataset.project,p=projectFor(pid),bid=form.dataset.id,b=buildFor(bid);
+  if(kind==="save-project"){
+    const existing=projectFor(form.dataset.id);
+    const item={...(existing||{id:id(),createdAt:today(),tasks:[],milestones:[],blockers:[],bugs:[],goals:[],notes:""}),name:data.name.trim(),oneLiner:data.oneLiner.trim(),description:data.description.trim(),githubUrl:safeUrl(data.githubUrl),type:data.type,status:data.status,phase:data.phase,priority:data.priority,progress:Math.max(0,Math.min(100,+data.progress||0)),health:data.health===""?null:Math.max(0,Math.min(100,+data.health)),targetDate:data.targetDate,technologies:data.technologies.split(",").map(x=>x.trim()).filter(Boolean),updatedAt:new Date().toISOString()};
+    if(existing)Object.assign(existing,item);else state.projects.unshift(item);
+    state.projectId=item.id;state.page="project";document.getElementById("overlay").innerHTML="";persist();render();showToast(existing?"Project updated.":"Project added.");return;
+  }
+  if(kind==="save-build"){
+    const existing=buildFor(form.dataset.id),item={...(existing||{id:id(),color:state.physical.length%8,milestones:[],updates:[]}),name:data.name.trim(),category:data.category,status:data.status,description:data.description,budget:data.budget===""?null:+data.budget,target_date:data.target_date};
+    if(existing)Object.assign(existing,item);else state.physical.unshift(item);
+    state.physicalId=item.id;state.page="physical";document.getElementById("overlay").innerHTML="";persist();render();return;
+  }
+  if(kind==="add-project-task"&&p){p.tasks.push(emptyTask(data.title.trim(),"todo",data.priority));}
+  else if(kind==="add-goal"&&p){p.goals.push(data.title.trim());}
+  else if(kind==="add-milestone"&&p){p.milestones.push({id:id(),title:data.title.trim(),due:data.due,status:"todo"});}
+  else if(kind==="add-issue"&&p){p[form.dataset.kind].push({id:id(),title:data.title.trim(),detail:"",priority:"medium",status:"open"});}
+  else if(kind==="add-plan"){
+    const t=emptyTask(data.title.trim(),"todo","medium");
+    if(data.project&&projectFor(data.project))projectFor(data.project).tasks.push(t);
+    else state.planTasks.push({...t,projectId:null});
+  }
+  else if(kind==="build-update"&&b){
+    b.updates.unshift({id:id(),day:data.day||today(),progress:Math.max(0,Math.min(100,+data.progress||0)),note:data.note.trim(),hours:+data.hours||0,cost:+data.cost||0});
+  }
+  else if(kind==="add-build-milestone"&&b){b.milestones.push({id:id(),title:data.title.trim(),done:false});}
+  else return;
+  persist();render();showToast("Saved.");
+}
+document.addEventListener("click",handleClick);
+document.addEventListener("submit",handleSubmit);
+document.addEventListener("change",e=>{
+  const el=e.target;
+  if(el.dataset.action==="filter-type"){state.ui.type=el.value;persist();render()}
+  else if(el.dataset.action==="sort"){state.ui.sort=el.value;persist();render()}
+  else if(el.dataset.action==="import"&&el.files?.[0]){importData(el.files[0]);el.value=""}
+  else if(el.dataset.action==="notes"){const p=projectFor(el.dataset.project);if(p){p.notes=el.value;persist();showToast("Notes saved.")}}
+});
+document.addEventListener("input",e=>{
+  const el=e.target;
+  if(el.dataset.action==="search"){
+    state.ui.q=el.value;const start=el.selectionStart;
+    clearTimeout(searchTimer);searchTimer=setTimeout(()=>{render();const next=document.querySelector("[data-action=search]");if(next){next.focus();next.setSelectionRange(start,start)}},80);
+  }
+});
+document.addEventListener("click",e=>{
+  const section=e.target.closest("[data-section]");
+  if(section){e.preventDefault();document.getElementById(section.dataset.section)?.scrollIntoView({behavior:"smooth"});return}
+  const b=e.target.closest("[data-page]");if(b){go(b.dataset.page);return}
+  if(e.target.closest(".modal")&&e.target.classList.contains("modal"))document.getElementById("overlay").innerHTML="";
+});
+document.addEventListener("keydown",e=>{
+  if((e.key==="Enter"||e.key===" ")&&e.target.matches('[role="button"][data-action="open-project"],[role="button"][data-action="open-build"]')){
+    e.preventDefault();e.target.click();
+  }
+});
+window.addEventListener("hashchange",()=>{
+  const h=location.hash||"#/";
+  if(h.startsWith("#/project/")){try{openProject(decodeURIComponent(h.slice(10)))}catch(_){go("dashboard")}}
+  else if(h==="#/physical"||h.startsWith("#/physical/")){state.page="physical";state.projectId=null;state.physicalId=h.startsWith("#/physical/")?decodeURIComponent(h.slice(11)):null;persist();render()}
+  else if(h==="#/yt")go("yt");
+  else if(h==="#/settings")go("settings");
+  else go("dashboard");
+});
+document.documentElement.dataset.theme=state.theme||"light";
+if(location.hash.startsWith("#/project/")){state.projectId=decodeURIComponent(location.hash.slice(10));state.page="project"}
+else if(location.hash.startsWith("#/physical/")){state.page="physical";state.physicalId=decodeURIComponent(location.hash.slice(11))}
+else if(location.hash==="#/physical")state.page="physical";
+else if(location.hash==="#/yt")state.page="yt";
+else if(location.hash==="#/settings")state.page="settings";
+render();
+})();
+</script>
+</body>
+</html>

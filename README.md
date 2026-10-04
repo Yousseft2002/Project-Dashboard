@@ -61,5 +61,54 @@ All dashboard statistics are computed from this list in `static/js/model.js`.
 - `data/`: your database, scan snapshots and preview images. Everything stays
   on this PC.
 
-Requirements: Python 3.11 or newer, and Edge or Chrome for previews. No
-packages to install.
+Requirements: Python 3.11 or newer, and Edge or Chrome for previews. The app
+uses only the Python standard library; no packages to install.
+
+## Render deployment (public testing)
+
+The optional `render.yaml` Blueprint config deploys the Python web service from
+the `main` branch. It uses `pip install -r requirements.txt` and `python
+run.py`; Render's `PORT` is used automatically, and the service binds to
+`0.0.0.0`. The frontend and API remain same-origin. Render terminates HTTPS;
+the self-signed LAN listener is not started in production.
+
+Before exposing the service, set `APP_PASSWORD` in the Render service's
+environment variables to a unique, randomly generated secret of at least 16
+characters. It is deliberately not stored in this repository or Blueprint.
+`APP_ENV=production` enables the password login, secure session cookie,
+request host validation against Render's `RENDER_EXTERNAL_HOSTNAME`, HTTPS
+security header, and restrictions on local-only operations. Do not use real
+confidential, employee, patient, manufacturing, or GMP records for this test
+deployment.
+
+### Local files and cloud limitations
+
+The app stores SQLite data, scan snapshots, previews, login sessions, and logs
+in `data/`. Render's default filesystem is ephemeral: these records can
+disappear after a restart, redeploy, or instance replacement. No persistent
+disk or external database is configured. Treat this deployment as disposable
+testing; export/backup anything you intentionally want to keep, and do not
+assume an export/backup flow covers every internal record.
+
+The cloud instance cannot scan your computer's folders, use your local Claude
+Code CLI or its login, capture local browser previews, open VS Code/folders,
+or use OneDrive sync. Project folder scanning and AI plan/analyze operations
+are disabled where possible; the normal browser UI, same-origin API, physical
+builds, and manually entered project/task data remain available after login.
+Data entered in the Render instance belongs to its temporary SQLite database
+and should be considered disposable.
+
+### Deploy from GitHub
+
+1. Push/merge this configuration to the `main` branch in GitHub.
+2. In Render, choose **New → Blueprint**, connect `Yousseft2002/Project-Dashboard`,
+   select `main`, and apply `render.yaml` (or use **New → Web Service** and set
+   the same build/start commands and `/health` health check).
+3. Set `APP_PASSWORD` in the service's Environment page. Use a password
+   manager to generate it; do not put the value in `render.yaml`, GitHub, or
+   chat. Keep `APP_ENV=production`.
+4. Deploy. Render creates the public `https://<service-name>.onrender.com/`
+   URL and automatically redeploys when new commits arrive on `main`.
+
+The public URL is assigned by Render when the service is created; this
+repository change does not itself create a Render service or know that URL.

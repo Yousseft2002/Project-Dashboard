@@ -36,6 +36,12 @@ _ctx = threading.local()
 def is_remote() -> bool:
     """True while handling a request that arrived on the phone (LAN) listener."""
     return getattr(_ctx, "remote", False)
+
+
+def is_cloud() -> bool:
+    return getattr(_ctx, "cloud", False)
+
+
 LOCAL_MACHINE = socket.gethostname()
 KIT_SRC = ROOT / "ytpc_kit"
 
@@ -480,8 +486,10 @@ def api_state(body, **_):
             "digital": {"hidden": view["hidden"], "machines": view["machines"], "general": view["general"]},
             "physical": physical_view(), "scan": scan_state,
             "meta": {"phases": analyzer.PHASES, "types": analyzer.TYPES, "statuses": projects.STATUSES,
-                     "priorities": projects.PRIORITIES, "browser": bool(previews.find_browser())},
-            "machine": socket.gethostname(), "analysis": analysis_status(), "access": {"remote": is_remote()},
+                     "priorities": projects.PRIORITIES, "browser": not is_cloud() and bool(previews.find_browser()),
+                     "scanAvailable": not is_cloud()},
+            "machine": socket.gethostname(), "analysis": analysis_status(),
+            "access": {"remote": is_remote() or is_cloud(), "cloud": is_cloud()},
             "settings": settings_payload()}
 
 
@@ -555,6 +563,8 @@ def api_scan_status(body, **_):
 
 @route("POST", r"/api/scan")
 def api_scan(body, **_):
+    if is_cloud():
+        raise ValueError("Scanning project folders is available only in local development.")
     return {"started": start_scan(), **scan_state}
 
 
@@ -748,6 +758,9 @@ class TrackerServer(ThreadingHTTPServer):
     daemon_threads = True
     remote = False      # True for the phone listener: login required, PC-only routes blocked
     tls = False
+    cloud = False
+    auth_required = False
+    expected_host = None
 
     def handle_error(self, request, client_address):   # failed TLS handshakes and dropped connections are routine
         pass
@@ -776,6 +789,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(payload)))
         self._common_headers()
+        if self.server.cloud:
+            self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         for k, v in extra:
             self.send_header(k, v)
         self.end_headers()
@@ -798,35 +813,48 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, fp.read_bytes(), ctype)
 
     def _authed(self) -> bool:
-        return (not self.server.remote) or security.valid_session(security.cookie_from(self.headers.get("Cookie")))
+        return not (self.server.remote or self.server.auth_required) or security.valid_session(
+            security.cookie_from(self.headers.get("Cookie")))
 
     def _login(self, body: dict):
-        if not self.server.remote:
+        if self.server.cloud:
+            ip = self.client_address[0]
+            wait = security.throttle_wait(ip)
+            if wait:
+                return self._json(429, {"error": f"Too many wrong passwords. Try again in {max(1, wait // 60)} min."},
+                                  [("Retry-After", str(wait))])
+            password = str(body.get("code", ""))[:256]
+            if not security.try_password(ip, password, os.environ["APP_PASSWORD"]):
+                return self._json(401, {"error": "Incorrect password."})
+        elif not self.server.remote:
             return self._json(200, {"ok": True})
-        ip = self.client_address[0]
-        wait = security.throttle_wait(ip)
-        if wait:
-            return self._json(429, {"error": f"Too many wrong codes. Try again in {max(1, wait // 60)} min."},
-                              [("Retry-After", str(wait))])
-        if not security.try_code(ip, str(body.get("code", ""))[:64]):
-            return self._json(401, {"error": "That code isn't right."})
+        else:
+            ip = self.client_address[0]
+            wait = security.throttle_wait(ip)
+            if wait:
+                return self._json(429, {"error": f"Too many wrong codes. Try again in {max(1, wait // 60)} min."},
+                                  [("Retry-After", str(wait))])
+            if not security.try_code(ip, str(body.get("code", ""))[:64]):
+                return self._json(401, {"error": "That code isn't right."})
         token = security.new_session()
         cookie = (f"{security.COOKIE}={token}; Path=/; Max-Age={security.SESSION_DAYS * 86400}; HttpOnly; SameSite=Strict"
-                  + ("; Secure" if self.server.tls else ""))
+                  + ("; Secure" if self.server.tls or self.server.cloud else ""))
         self._json(200, {"ok": True}, [("Set-Cookie", cookie)])
 
     def _logout(self):
         security.end_session(security.cookie_from(self.headers.get("Cookie")))
-        gone = f"{security.COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict" + ("; Secure" if self.server.tls else "")
+        gone = f"{security.COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict" + (
+            "; Secure" if self.server.tls or self.server.cloud else "")
         self._json(200, {"ok": True}, [("Set-Cookie", gone)])
 
     def _dispatch(self, method: str):
         srv = self.server
         _ctx.remote = srv.remote
+        _ctx.cloud = srv.cloud
         path = urlsplit(self.path).path
         host = (self.headers.get("Host") or "").lower()
         # 1. Who is this, and are they talking to us by a name we own?
-        if not security.host_ok(host, srv.remote, srv.server_address[1]):
+        if not security.host_ok(host, srv.remote, srv.server_address[1], srv.expected_host if srv.cloud else None):
             return self._json(400, {"error": "unexpected host"})
         if srv.remote and not security.is_private(self.client_address[0]):
             return self._json(403, {"error": "forbidden"})
@@ -837,6 +865,8 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if origin and urlsplit(origin).netloc.lower() != host:
             return self._json(403, {"error": "forbidden origin"})
+        if path == "/health" and method == "GET":
+            return self._json(200, {"status": "ok"})
         # 3. Read a bounded body.
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -858,7 +888,9 @@ class Handler(BaseHTTPRequestHandler):
             if api_call:
                 return self._json(401, {"error": "login required"})
             return self._redirect("/login")
-        if srv.remote and LOCAL_ONLY.match(path):
+        if srv.cloud and re.match(r"^/api/(scan|analyze(?:/|$)|previews$|planner/(?:instruction|regenerate)$)", path):
+            return self._json(501, {"error": "This feature requires the local development server."})
+        if (srv.remote or srv.auth_required) and LOCAL_ONLY.match(path):
             return self._json(403, {"error": "This can only be done on the PC itself."})
         if path == "/login" and self._authed():
             return self._redirect("/")
@@ -987,15 +1019,28 @@ def api_access_revoke(body, **_):
     return access_payload()
 
 
-def serve(port: int = 8765) -> ThreadingHTTPServer:
+def serve(port: int = 8765, *, host: str = "127.0.0.1", production: bool = False,
+          expected_host: str | None = None) -> ThreadingHTTPServer:
+    if production:
+        password = os.environ.get("APP_PASSWORD", "")
+        if len(password) < 16:
+            raise RuntimeError("Set APP_PASSWORD to a strong secret of at least 16 characters before production startup.")
+        if not expected_host:
+            raise RuntimeError("Set PUBLIC_HOSTNAME or RENDER_EXTERNAL_HOSTNAME before production startup.")
+        host = "0.0.0.0"
     # Windows can map .js/.css to text/plain via the registry; browsers then refuse them.
     mimetypes.add_type("text/javascript", ".js")
     mimetypes.add_type("text/css", ".css")
     mimetypes.add_type("image/webp", ".webp")
-    httpd = TrackerServer(("127.0.0.1", port), Handler)
-    if security.is_enabled():
+    httpd = TrackerServer((host, port), Handler)
+    httpd.cloud = production
+    httpd.auth_required = production
+    httpd.expected_host = expected_host.strip().lower().rstrip(".") if expected_host else None
+    if not production and security.is_enabled():
         threading.Thread(target=start_lan, daemon=True).start()
-    if not list(SNAPSHOTS.glob("*.json")):
+    if production:
+        scan_state.update(running=False, message="Scanning unavailable in cloud mode", error=None)
+    elif not list(SNAPSHOTS.glob("*.json")):
         start_scan()  # first launch: populate the digital dashboard
     else:
         threading.Thread(target=enqueue_previews, kwargs={"missing_only": True}, daemon=True).start()
