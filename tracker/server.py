@@ -1041,15 +1041,35 @@ class Handler(BaseHTTPRequestHandler):
         if origin and urlsplit(origin).netloc.lower() != host:
             return self._json(403, {"error": "forbidden origin"})
         if path in ('/health','/api/health') and method == 'GET':
-            return self._json(200, {'status':'ok','service':'project-planner','collector_api_version':2,'collector_endpoints':['register','heartbeat','projects','status']})
+            return self._json(200, {'status':'ok','service':'project-planner','collector_api_version':2,'agent_api_version':1,'collector_endpoints':['register','heartbeat','projects','status']})
         # 3. Read a bounded body.
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             return self._json(400, {"error": "bad request"})
-        if length < 0 or length > (5_000_000 if path.startswith('/api/collector/') else MAX_BODY):
+        if length < 0 or length > (2_000_000 if path.startswith('/api/agent/') else 5_000_000 if path.startswith('/api/collector/') else MAX_BODY):
             return self._json(413, {"error": "request too large"})
         raw = self.rfile.read(length) if length else b""
+        if path.startswith('/api/agent/v1/'):
+            endpoint=path[len('/api/agent/v1/'):]
+            if endpoint in ('pair/start','pair/claim') and method=='POST':
+                path='/api/collector/'+endpoint
+            else:
+                from . import agent_api
+                if (method,endpoint) not in (('POST','register'),('POST','heartbeat'),('POST','projects'),('POST','events/batch'),('GET','status')):
+                    return self._json(404,{'error':'Agent operation not supported'})
+                if length>2_000_000: return self._json(413,{'error':'Agent request too large'})
+                auth=self.headers.get('Authorization','')
+                device=central.authenticate(auth[7:] if auth.startswith('Bearer ') else '')
+                if not device: return self._json(401,{'error':'Invalid or revoked device credential'})
+                if agent_api.limited(device): return self._json(429,{'error':'Agent rate limit reached'},[('Retry-After','60')])
+                try:
+                    body=json.loads(raw or b'{}')
+                    if not isinstance(body,dict) or body.get('device_id',device)!=device: raise ValueError('Device identity mismatch')
+                    return self._json(200,agent_api.dispatch(central,device,endpoint,body))
+                except (ValueError,TypeError): return self._json(400,{'error':'Invalid agent metadata; local queue must be retained'})
+                except Exception:
+                    log_error(); return self._json(500,{'error':'Agent database operation failed'})
         # 4. Login gate for the phone listener.
         if path == "/api/login" and method == "POST":
             try:

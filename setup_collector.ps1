@@ -7,6 +7,7 @@ param(
     [string[]]$Workspaces,
     [string]$TestProject,
     [switch]$LocalDevelopment,
+    [switch]$Agent,
     [switch]$NoRun
 )
 $ErrorActionPreference = 'Stop'
@@ -103,6 +104,7 @@ if (-not $reuse) {
     } else { $usePairing = $true }
 }
 $config = [ordered]@{ server = $ServerUrl.TrimEnd('/'); device_name = $DeviceName; installation_id = $installationId; token_file = $tokenFile; workspaces = @($Workspaces); sync_seconds = 300; heartbeat_seconds = 60; max_depth = 5; ai_metadata = $false; ignore = @() }
+if ($previous -and $previous.agent_id) { $config.agent_id = $previous.agent_id }
 if ($previous -and $previous.device_id -and $previous.server -eq $ServerUrl) { $config.device_id = $previous.device_id }
 $config | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
 $developmentArgs = @()
@@ -117,6 +119,20 @@ Write-Host 'Testing HTTPS, registration and heartbeat FIRST...'
 if ($LASTEXITCODE -ne 0) { throw 'Heartbeat verification failed. No project data was uploaded. Correct the reported error and rerun setup.' }
 Write-Host "Open $ServerUrl/#/integrations and confirm this device is online."
 if ((Read-Host 'Does the dashboard show this device online? [y/N]') -notmatch '^[yY]') { throw 'Stopped before project ingestion. Verify the production dashboard/device connection first.' }
+
+if ($Agent) {
+    if ($LocalDevelopment) { throw 'Automatic startup is only supported for production in this MVP.' }
+    Push-Location -LiteralPath $PSScriptRoot
+    try {
+        & $pythonExe @pythonPrefix -m agent preview --config $ConfigPath
+        if ($LASTEXITCODE -ne 0) { throw 'Agent requires each selected path to be a repository root.' }
+        if ((Read-Host 'Upload this Git metadata and enable automatic startup? [y/N]') -notmatch '^[yY]') { Write-Host 'Stopped. Preview was local only.'; exit 0 }
+        & $pythonExe @pythonPrefix -m agent run --config $ConfigPath --once
+        if ($LASTEXITCODE -ne 0) { throw 'Live agent verification failed; queue retained. Automatic startup not installed.' }
+        & (Join-Path $PSScriptRoot 'install_agent.ps1') -ConfigPath $ConfigPath
+    } finally { Pop-Location }
+    exit 0
+}
 
 if (-not $TestProject) { $TestProject = Read-Host 'Path to ONE real Git repository (must contain at least one commit)' }
 Write-Host 'Testing ONE repository...'

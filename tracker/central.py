@@ -88,6 +88,14 @@ def clean_project(p):
         if not isinstance(commit, dict) or not re.fullmatch(r'[a-fA-F0-9]{7,64}', str(commit.get('sha', ''))):
             raise ValueError('Invalid commit SHA')
         out['commits'].append({'sha': commit['sha'].lower(), 'timestamp': timestamp(commit.get('timestamp'))})
+        if 'message' in commit:
+            from agent.security import text
+            if not isinstance(commit['message'],str) or len(commit['message'])>300: raise ValueError('Invalid commit message')
+            out['commits'][-1]['message']=text(commit['message'])
+    for field in ('added_files','modified_files','deleted_files','ahead','behind'):
+        value=p.get(field,0)
+        if type(value) is not int or not 0<=value<=10000000: raise ValueError('Invalid Git count')
+        out[field]=value
     sessions = p.get('ai_sessions', [])
     if not isinstance(sessions,list) or len(sessions)>100:
         raise ValueError('Maximum 100 session metadata entries')
@@ -102,6 +110,7 @@ def clean_project(p):
 class CentralStore:
     def __init__(self, db):
         self.db = db
+        # Add agent diagnostics alongside the existing credential schema below.
         with db.conn() as c:
             c.executescript(SCHEMA)
             columns = {r[1] for r in c.execute('PRAGMA table_info(devices)')}
@@ -133,7 +142,9 @@ class CentralStore:
             row=c.execute('SELECT * FROM collector_pairings WHERE code=? AND expires_at>?',(str(code).strip().upper(),now())).fetchone()
             if not row: raise ValueError('Pairing code invalid or expired')
             if row['device_id']: return {'ok':True,'device_id':row['device_id']}
-            device_id=re.sub(r'[^\w.-]','-',row['device_name'])[:60]+'-'+row['installation_id'].replace('-','')[:8]
+            import uuid
+            prior=c.execute('SELECT id FROM devices WHERE installation_id=?',(row['installation_id'],)).fetchone()
+            device_id=prior['id'] if prior else str(uuid.uuid4())
             existing=c.execute('SELECT installation_id FROM devices WHERE id=?',(device_id,)).fetchone()
             if existing and existing['installation_id']!=row['installation_id']:
                 raise ValueError('Device identity conflict')
@@ -280,8 +291,10 @@ class CentralStore:
         return {'ok':True,'device':dict(row),'projects':projects,'database_write':bool(row['last_seen'])}
 
     def snapshot(self):
+        from .agent_api import initialize
+        initialize(self.db)
         with self.db.conn() as c:
-            devices = [dict(r) for r in c.execute('SELECT id,device_name,platform,first_seen,last_seen,revoked,collector_version,last_attempt,last_error,last_sync,projects_synced,activities_synced FROM devices')]
+            devices = [dict(r) for r in c.execute('SELECT id,device_name,platform,first_seen,last_seen,revoked,collector_version,last_attempt,last_error,last_sync,projects_synced,activities_synced,agent_id,agent_version,queue_size FROM devices')]
             sources = [dict(r) for r in c.execute('SELECT * FROM sources')]
             events = [dict(r) for r in c.execute('SELECT * FROM activities ORDER BY timestamp DESC LIMIT 500')]
             rows = [dict(r) for r in c.execute('SELECT * FROM central_projects')]
@@ -311,7 +324,7 @@ class CentralStore:
             latest = obs[0]
             commits = {x['sha']: x for o in obs for x in o['commits']}
             recent = sorted(commits.values(), key=lambda x:x['timestamp'], reverse=True)
-            out.append({'key': p['id'], 'name': p['name'], 'path': latest['path'], 'machine': latest['device_id'], 'machines': [o['device_id'] for o in obs], 'kind': 'folder', 'git': {'remote': 'https://' + latest['repository'] if latest['repository'] else None, 'branch': latest.get('branch'), 'uncommitted': latest['changed_files'], 'recent_commits': [{'hash': x['sha'], 'ts': x['timestamp'], 'subject': 'Commit '+x['sha'][:12]} for x in recent], 'commit_count': len(recent)}, 'files': {'last_modified': latest['last_activity'], 'files': latest['file_count'], 'todos': latest['todo_count']}, 'stack': [v for v in (latest.get('language'), latest.get('framework')) if v], 'activity': {}, 'ai_tools': {}, 'recent_sessions': [], 'recent_prompts': [], 'last_activity': max((o['last_activity'] for o in obs if o['last_activity']), default=None), 'central': p, 'last_synced': latest['synced_at'], 'todo_count': latest['todo_count']})
+            out.append({'key': p['id'], 'name': p['name'], 'path': latest['path'], 'machine': latest['device_id'], 'machines': [o['device_id'] for o in obs], 'kind': 'folder', 'git': {'remote': 'https://' + latest['repository'] if latest['repository'] else None, 'branch': latest.get('branch'), 'uncommitted': latest['changed_files'], 'recent_commits': [{'hash': x['sha'], 'ts': x['timestamp'], 'subject': x.get('message') or 'Commit '+x['sha'][:12]} for x in recent], 'commit_count': len(recent)}, 'files': {'last_modified': latest['last_activity'], 'files': latest['file_count'], 'todos': latest['todo_count']}, 'stack': [v for v in (latest.get('language'), latest.get('framework')) if v], 'activity': {}, 'ai_tools': {}, 'recent_sessions': [], 'recent_prompts': [], 'last_activity': max((o['last_activity'] for o in obs if o['last_activity']), default=None), 'central': p, 'last_synced': latest['synced_at'], 'todo_count': latest['todo_count']})
             raw = out[-1]
             if not latest['git_observed']:
                 raw['git'] = None
