@@ -45,6 +45,8 @@ def run(path, once=False, preview=False, local_development=False):
     runtime=path.parent/'data'/'agent'; runtime.mkdir(parents=True,exist_ok=True)
     with InstanceLock(runtime/'service.lock'):
         queue=Queue(runtime/'queue.sqlite'); diagnostics=Diagnostics(runtime/'diagnostics.json')
+        queue.allowlist(config['workspaces'])
+        queue.rebind(config['device_id'])
         token=credential(config,path)
         client=AgentClient(config['server'],token)
         stop=threading.Event(); requested=threading.Event()
