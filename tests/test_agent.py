@@ -68,7 +68,7 @@ class AgentTests(unittest.TestCase):
     def test_service_once_collects_and_uploads(self):
         from agent import service
         config=dict(self.config,installation_id='existing-installation',device_name='YT-Laptop',
-                    server='https://project-dashboard-0d02.onrender.com',workspaces=[],reconcile_seconds=900)
+                    server='https://project-dashboard-0d02.onrender.com',workspaces=[self.project['path']],reconcile_seconds=900)
         client=self.client()
         client.health=lambda: {'agent_api_version':1}
         client.register_agent=lambda config: None
@@ -88,6 +88,17 @@ class AgentTests(unittest.TestCase):
         subprocess.run(['git','-C',str(repo),'init'],check=True,capture_output=True)
         subprocess.run(['git','-C',str(repo),'config','include.path',str(self.root/'outside')],check=True,capture_output=True)
         with self.assertRaisesRegex(ValueError,'includes'): snapshot(repo,self.device['device_id'])
+
+    def test_repair_retains_queue_and_removed_allowlist_cannot_upload(self):
+        self.queue.put('local-project',self.project,[self.event])
+        self.queue.rebind('replacement-device')
+        self.assertEqual(self.queue.pending(),1)
+        rows=self.queue.projects(); self.queue.mapped(rows,['project-example'])
+        self.assertEqual(self.queue.events()[0]['device_id'],'replacement-device')
+        self.queue.allowlist([self.root/'different-repository'])
+        self.assertEqual(self.queue.projects(True),[])
+        self.assertEqual(self.queue.events(),[])
+        self.assertEqual(self.queue.pending(),1)
 
     def test_malicious_ack_cannot_discard_queue(self):
         self.queue.put('local-project',self.project,[self.event])
