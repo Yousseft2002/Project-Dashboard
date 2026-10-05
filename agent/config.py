@@ -6,8 +6,10 @@ def load(path=DEFAULT_CONFIG, local_development=False):
     path = Path(path).resolve()
     config = read_json(path)
     origin = server_url(config, local_development)
-    if not local_development and origin != PRODUCTION_URL:
+    if not local_development and origin != PRODUCTION_URL and origin != config.get('approved_server'):
         raise ValueError('Agent production target must be the approved Project Dashboard origin')
+    if not local_development and config.get('credential_server',PRODUCTION_URL)!=origin:
+        raise ValueError('Credential belongs to another origin; explicitly pair this deployment first')
     if not config.get('device_id') or not config.get('installation_id'):
         raise ValueError('Pair this computer with setup_collector.ps1 first')
     roots = config.get('workspaces')

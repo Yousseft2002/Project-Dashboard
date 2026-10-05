@@ -1,0 +1,11 @@
+data/
+.git/
+.env*
+collector.config.json
+*.dpapi
+*.sqlite*
+*.db
+__pycache__/
+tests/
+artifact-version/
+PRODUCTION_SYNC_PROOF.md

@@ -32,10 +32,26 @@ STATIC = ROOT / "static"
 DATA = Path(os.environ.get("TRACKER_DATA_DIR", str(ROOT / "data")))
 SNAPSHOTS = DATA / "snapshots"
 
-db = DB(DATA / "tracker.db")
-central = CentralStore(db)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s %(message)s')
 _ctx = threading.local()
+
+class Resource:
+    """Lazy default resources; HTTP adapters may bind request-scoped stores."""
+    def __init__(self,name,factory): self.name=name; self.factory=factory; self.value=None; self.lock=threading.Lock()
+    def __getattr__(self,name):
+        value=getattr(_ctx,self.name,None)
+        if value is None:
+            with self.lock:
+                if self.value is None: self.value=self.factory()
+                value=self.value
+        return getattr(value,name)
+
+def _database():
+    from .postgres import database
+    return database(DATA/'tracker.db',require_postgres=os.environ.get('VERCEL')=='1')
+
+db=Resource('database',_database)
+central=Resource('central_store',lambda: CentralStore(db))
 
 
 def is_remote() -> bool:
@@ -162,7 +178,6 @@ def analysis_worker():
             current.update(key=None, proc=None)
 
 
-threading.Thread(target=analysis_worker, daemon=True).start()
 
 
 # ---------------------------------------------------------------- preview screenshots
@@ -225,7 +240,6 @@ def preview_worker():
             job.update(status="error", error=str(e)[:300])
 
 
-threading.Thread(target=preview_worker, daemon=True).start()
 
 
 # ---------------------------------------------------------------- daily planner job
@@ -282,6 +296,9 @@ def analysis_status() -> dict:
 
 def load_snapshots() -> list[dict]:
     """This PC's snapshot from data/, plus other PCs' snapshots from the synced folder (newest wins)."""
+    if is_cloud():
+        from .dashboard_transfer import saved_snapshots
+        return [dict(snap,_source='owner import') for snap in saved_snapshots(db)]
     files = [(fp, "local") for fp in sorted(SNAPSHOTS.glob("*.json"))]
     sd = sync_dir()
     if sd and (sd / "snapshots").is_dir():
@@ -533,7 +550,7 @@ def project_list(view: dict) -> list[dict]:
     with db.conn() as c:
         imported_previews = {row['project_key']: row['name'] for row in c.execute('SELECT project_key,name FROM dashboard_import_previews')}
     for raw in view['projects']:
-        p = projects.build(raw, overrides.get(raw['key'], {}), items.get(raw['key'], []), errors)
+        p = projects.build(raw, overrides.get(raw['key'], {}), items.get(raw['key'], []), errors,local=not is_cloud())
         p['facts']['local'] = not is_cloud() and p['facts']['local']
         if not p['previewImage'] and raw['key'] in imported_previews:
             p['previewImage'] = '/previews/' + imported_previews[raw['key']]
@@ -573,7 +590,7 @@ def api_dashboard_export(body, **_):
     saved = digital_view()
     snapshot = {'machine': LOCAL_MACHINE, 'scanned_at': datetime.now(timezone.utc).isoformat(),
                 'projects': [dict(p, owner_key=p['key']) for p in saved['projects']], 'general': {}}
-    return export_dashboard(db, [snapshot], LOCAL_MACHINE, previews.PREVIEWS)
+    return export_dashboard(db, [snapshot], LOCAL_MACHINE, None if is_cloud() else previews.PREVIEWS)
 
 
 @route('POST', r'/api/dashboard/import')
@@ -664,6 +681,10 @@ def api_analyze_stop(body, **_):
 
 
 def settings_payload() -> dict:
+    if is_cloud():
+        return {'model':db.get_setting('model','sonnet'),'models':analyzer.MODELS,'claude_found':False,
+                'local_machine':LOCAL_MACHINE,'sync_dir':'','sync_ok':False,'kit_ready':False,
+                'cloud_url':'','cloud_set':False,'cloud_pushed':''}
     sd = sync_dir()
     return {"model": db.get_setting("model", "sonnet"), "models": analyzer.MODELS,
             "claude_found": bool(analyzer.find_claude()), "local_machine": LOCAL_MACHINE,
@@ -1055,18 +1076,11 @@ class Handler(BaseHTTPRequestHandler):
             if endpoint in ('pair/start','pair/claim') and method=='POST':
                 path='/api/collector/'+endpoint
             else:
-                from . import agent_api
-                if (method,endpoint) not in (('POST','register'),('POST','heartbeat'),('POST','projects'),('POST','events/batch'),('GET','status')):
-                    return self._json(404,{'error':'Agent operation not supported'})
-                if length>2_000_000: return self._json(413,{'error':'Agent request too large'})
-                auth=self.headers.get('Authorization','')
-                device=central.authenticate(auth[7:] if auth.startswith('Bearer ') else '')
-                if not device: return self._json(401,{'error':'Invalid or revoked device credential'})
-                if agent_api.limited(device): return self._json(429,{'error':'Agent rate limit reached'},[('Retry-After','60')])
+                from .cloud_http import agent_operation
                 try:
                     body=json.loads(raw or b'{}')
-                    if not isinstance(body,dict) or body.get('device_id',device)!=device: raise ValueError('Device identity mismatch')
-                    return self._json(200,agent_api.dispatch(central,device,endpoint,body))
+                    code,result,headers=agent_operation(central,method,endpoint,self.headers.get('Authorization',''),body)
+                    return self._json(code,result,list(headers.items()))
                 except (ValueError,TypeError): return self._json(400,{'error':'Invalid agent metadata; local queue must be retained'})
                 except Exception:
                     log_error(); return self._json(500,{'error':'Agent database operation failed'})
@@ -1379,6 +1393,9 @@ def serve(port: int = 8765, *, host: str = "127.0.0.1", production: bool = False
     mimetypes.add_type("text/javascript", ".js")
     mimetypes.add_type("text/css", ".css")
     mimetypes.add_type("image/webp", ".webp")
+    if not production:
+        threading.Thread(target=analysis_worker, daemon=True).start()
+        threading.Thread(target=preview_worker, daemon=True).start()
     httpd = TrackerServer((host, port), Handler)
     httpd.cloud = production
     httpd.auth_required = production

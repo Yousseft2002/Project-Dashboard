@@ -1,4 +1,6 @@
 data/
+public/
+.vercel/
 __pycache__/
 *.pyc
 static/Python/
