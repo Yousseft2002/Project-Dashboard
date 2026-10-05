@@ -58,14 +58,26 @@ const typing = () => {
   const a = document.activeElement;
   return a && $app.contains(a) && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !["checkbox", "radio", "range", "file"].includes(a.type)));
 };
+// Refresh live telemetry without clearing drafts, open dialogs, selected upload
+// files, or forms being edited. Failed polls leave the previous view intact.
+let liveLoading=false;
+const editing = () => typing() || document.querySelector('dialog[open]')
+  || [...$app.querySelectorAll('input[type="file"]')].some(input=>input.files?.length)
+  || (document.activeElement && $app.contains(document.activeElement) && document.activeElement.closest('form'));
+setInterval(async () => {
+  if (document.hidden || !state.data || liveLoading || editing()) return;
+  liveLoading=true;
+  try { await load({quiet:true}); } catch { /* retain previous data until next poll */ }
+  finally { liveLoading=false; }
+},20000);
 // A quiet reload (from a finished background job) never wipes something being typed.
-document.addEventListener("focusout", () => setTimeout(() => { if (pendingRender && !typing()) render(); }, 50));
+document.addEventListener("focusout", () => setTimeout(() => { if (pendingRender && !editing()) render(); }, 50));
 
 async function load({ quiet = false } = {}) {
   state.data = await api("GET", "/api/state");
   document.body.classList.toggle("remote", !!state.data.access?.remote);
   updateScanStatus(state.data.scan);
-  if (quiet && typing()) { pendingRender = true; return; }
+  if (quiet && editing()) { pendingRender = true; return; }
   render();
   if (jobsActive() && !jobTimer) jobTimer = setTimeout(pollJobs, 1500);
 }
