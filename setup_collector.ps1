@@ -104,6 +104,9 @@ if (-not $reuse) {
     } else { $usePairing = $true }
 }
 $config = [ordered]@{ server = $ServerUrl.TrimEnd('/'); device_name = $DeviceName; installation_id = $installationId; token_file = $tokenFile; workspaces = @($Workspaces); sync_seconds = 300; heartbeat_seconds = 60; max_depth = 5; ai_metadata = $false; ignore = @() }
+$config.approved_server = $config.server
+if ($reuse) { $config.credential_server = if ($previous.credential_server) { $previous.credential_server } else { 'https://project-dashboard-0d02.onrender.com' } }
+elseif (-not $usePairing) { $config.credential_server = $config.server }
 if ($previous -and $previous.agent_id) { $config.agent_id = $previous.agent_id }
 if ($previous -and $previous.device_id -and $previous.server -eq $ServerUrl) { $config.device_id = $previous.device_id }
 $config | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ConfigPath -Encoding UTF8

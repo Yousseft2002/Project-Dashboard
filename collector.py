@@ -102,6 +102,7 @@ def protect_token(token,config,config_path):
     if result.returncode or not token_path.is_file():
         raise CollectorError('Could not protect the collector token with Windows DPAPI')
     config['token_file']=str(token_path)
+    config['credential_server']=server_url(config,True)
     write_json(config_path,config)
 
 def pair(client,config,config_path):
@@ -295,7 +296,9 @@ def main(argv=None):
         if state.get('server')!=server or state.get('installation_id')!=config['installation_id'] or state.get('device_id')!=config.get('device_id'):
             state={}
         state.update(server=server,installation_id=config['installation_id'],device_id=config.get('device_id'))
-        token=load_token(config,config_path)
+        if args.command!='pair' and config.get('credential_server',PRODUCTION_URL)!=server and not args.local_development:
+            raise CollectorError('Credential belongs to another origin. Pair this deployment first.')
+        token='' if args.command=='pair' else load_token(config,config_path)
         banner(config,server,token,state)
         if args.command=='pair':
             write_json(config_path,config)

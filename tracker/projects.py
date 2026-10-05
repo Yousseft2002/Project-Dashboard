@@ -79,7 +79,7 @@ def _item(r: dict) -> dict:
             "dependsOn": r.get("depends_on"), "via": r.get("via")}
 
 
-def build(raw: dict, override: dict, items: list[dict], preview_errors: dict | None = None) -> dict:
+def build(raw: dict, override: dict, items: list[dict], preview_errors: dict | None = None, *, local=True) -> dict:
     o = override or {}
     a = raw.get("analysis")
     r = (a or {}).get("result") or {}
@@ -139,9 +139,9 @@ def build(raw: dict, override: dict, items: list[dict], preview_errors: dict | N
         preview, preview_kind = f"/previews/{o['preview_image']}", "upload"
     else:
         shot = preview_path(raw["key"])
-        if shot.exists():
+        if local and shot.exists():
             preview, preview_kind = f"/previews/{shot.name}?v={int(shot.stat().st_mtime)}", "screenshot"
-        elif raw.get("images"):
+        elif local and raw.get("images"):
             preview, preview_kind = f"/api/repo-image?k={_q(raw['key'])}&i=0", "repo-image"
     device = "phone" if ptype in ("App", "Game") else "desktop"
 
@@ -201,7 +201,7 @@ def build(raw: dict, override: dict, items: list[dict], preview_errors: dict | N
         "facts": {
             "kind": raw.get("kind"), "path": raw.get("path"), "machine": raw.get("machine"),
             "machines": raw.get("machines") or [raw.get("machine")],
-            "local": bool(raw.get("path") and Path(raw["path"]).is_dir()),
+            "local": bool(local and raw.get("path") and Path(raw["path"]).is_dir()),
             "git": raw.get("git"), "files": raw.get("files"), "docs": raw.get("docs") or [],
             "readme": raw.get("readme"), "signals": raw.get("signals") or [], "aiTools": raw.get("ai_tools") or {},
             "recentSessions": raw.get("recent_sessions") or [], "recentPrompts": raw.get("recent_prompts") or [],
