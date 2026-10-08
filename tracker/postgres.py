@@ -75,8 +75,10 @@ class Connection:
         return Result(cursor,lastrowid=inserted)
     def executescript(self,script):
         self.raw.execute('SELECT pg_advisory_xact_lock(714236001)')
-        for statement in script.split(';'):
-            if re.sub(r'--[^\n]*','',statement).strip(): self.execute(statement)
+        # Owned schemas contain semicolons inside line comments. Strip those
+        # comments before splitting so their prose never becomes executable SQL.
+        for statement in re.sub(r'--[^\n]*','',script).split(';'):
+            if statement.strip(): self.execute(statement)
 
 class PostgresDB(DB):
     backend='postgresql'
