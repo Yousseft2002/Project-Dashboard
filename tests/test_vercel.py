@@ -132,6 +132,15 @@ class VercelTests(unittest.TestCase):
         connection.raw.execute.return_value.fetchone.return_value=None
         result=connection.execute('INSERT OR IGNORE INTO items(id) VALUES (?)',(1,))
         self.assertIsNone(result.lastrowid)
+    def test_postgres_schema_comments_do_not_become_statements(self):
+        from tracker.postgres import Connection
+        from tracker.db import SCHEMA
+        from unittest.mock import Mock
+        connection=Connection.__new__(Connection); connection.raw=Mock(); connection.execute=Mock()
+        connection.executescript(SCHEMA)
+        statements=[call.args[0].strip() for call in connection.execute.call_args_list]
+        self.assertTrue(statements)
+        self.assertTrue(all(statement.startswith('CREATE ') for statement in statements),statements)
 
 @unittest.skipUnless(os.environ.get('TEST_DATABASE_URL'),'Set TEST_DATABASE_URL to an isolated Neon test database')
 class NeonPersistenceTests(unittest.TestCase):
