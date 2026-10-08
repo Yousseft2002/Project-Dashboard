@@ -81,9 +81,11 @@ class VercelTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/access').status_code,403)
         self.assertEqual(self.client.get('/js/app.js').status_code,200)
         self.assertEqual(self.client.get('/api/agent/v1/execute').status_code,404)
-        with patch.dict(os.environ,{'DATABASE_URL':''}):
+        with patch.dict(os.environ,{'DATABASE_URL':'','POSTGRES_URL':''}):
             production=TestClient(create_app(hosts=['testserver'],password=self.password),base_url='https://testserver')
-            self.assertNotEqual(production.get('/api/health').status_code,200)
+            response=production.get('/api/health')
+            self.assertEqual(response.status_code,503)
+            self.assertIn('POSTGRES_URL',response.json()['error'])
             production.close()
     def test_persistent_rate_limit(self):
         from tracker.cloud_http import CloudAuth
@@ -114,6 +116,22 @@ class VercelTests(unittest.TestCase):
         self.assertIn('GREATEST(timestamp,%s)',sql('UPDATE activities SET timestamp=MAX(timestamp,?) WHERE id=?'))
         with self.assertRaises(ValueError): PostgresDB('sqlite:///local.db')
         with self.assertRaises(ValueError): PostgresDB('postgresql://user:password@database.invalid/db?sslmode=disable')
+    def test_postgres_cursor_without_description_and_neon_alias(self):
+        from types import SimpleNamespace
+        from tracker.postgres import row_factory, database, Connection
+        self.assertEqual(row_factory(SimpleNamespace(description=None))(()),{})
+        self.assertEqual(row_factory(SimpleNamespace(description=[SimpleNamespace(name='id')]))((7,))[0],7)
+        with patch.dict(os.environ,{'DATABASE_URL':'','POSTGRES_URL':'neon-url'}), patch('tracker.postgres.PostgresDB') as constructor:
+            database('unused',require_postgres=True)
+            constructor.assert_called_once_with('neon-url')
+        with patch.dict(os.environ,{'DATABASE_URL':'primary-url','POSTGRES_URL':'neon-url'}), patch('tracker.postgres.PostgresDB') as constructor:
+            database('unused',require_postgres=True)
+            constructor.assert_called_once_with('primary-url')
+        from unittest.mock import Mock
+        connection=Connection.__new__(Connection); connection.raw=Mock()
+        connection.raw.execute.return_value.fetchone.return_value=None
+        result=connection.execute('INSERT OR IGNORE INTO items(id) VALUES (?)',(1,))
+        self.assertIsNone(result.lastrowid)
 
 @unittest.skipUnless(os.environ.get('TEST_DATABASE_URL'),'Set TEST_DATABASE_URL to an isolated Neon test database')
 class NeonPersistenceTests(unittest.TestCase):

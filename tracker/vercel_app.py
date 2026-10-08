@@ -1,6 +1,7 @@
 """ASGI cloud HTTP adapter. Vercel owns the listener and process lifecycle."""
 import hmac
 import json
+import logging
 import os
 import re
 import threading
@@ -14,6 +15,10 @@ from .cloud_http import CloudAuth, agent_operation, owner_operation
 from . import security
 
 ROOT=Path(__file__).resolve().parent.parent
+logger=logging.getLogger(__name__)
+
+class DeploymentConfigurationError(Exception):
+    pass
 HEADERS={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY',
  'Referrer-Policy':'no-referrer','Cross-Origin-Resource-Policy':'same-origin',
  'Cross-Origin-Opener-Policy':'same-origin','Permissions-Policy':'camera=(), microphone=(), geolocation=(), payment=()',
@@ -30,9 +35,12 @@ def create_app(database_override=None,hosts=None,password=None):
         with lock:
             if not resources:
                 secret=password if password is not None else os.environ.get('APP_PASSWORD','')
-                if len(secret)<16: raise ValueError('APP_PASSWORD must contain at least 16 characters')
+                if len(secret)<16: raise DeploymentConfigurationError('APP_PASSWORD must contain at least 16 characters')
                 from .postgres import database
-                db=database_override if database_override is not None else database(ROOT/'data'/'unused.sqlite',require_postgres=True)
+                try:
+                    db=database_override if database_override is not None else database(ROOT/'data'/'unused.sqlite',require_postgres=True)
+                except ValueError:
+                    raise DeploymentConfigurationError('Configure DATABASE_URL or POSTGRES_URL with a PostgreSQL URL requiring TLS') from None
                 store=CentralStore(db)
                 from .agent_api import initialize as agent_initialize
                 agent_initialize(db)
@@ -124,8 +132,13 @@ def create_app(database_override=None,hosts=None,password=None):
             body=json.loads(raw) if raw else {}
             if not isinstance(body,dict): return reply(400,{'error':'Expected a JSON object'})
             return await run_in_threadpool(operation,request,body)
-        except (ValueError,TypeError): return reply(400,{'error':'Invalid request or missing secure deployment configuration'})
-        except Exception: return reply(503,{'error':'Cloud database operation unavailable'})
+        except DeploymentConfigurationError as error:
+            return reply(503,{'error':str(error)})
+        except (ValueError,TypeError): return reply(400,{'error':'Invalid request'})
+        except Exception as error:
+            # Exception messages and tracebacks may contain connection credentials.
+            logger.error('Cloud operation failed: %s',type(error).__name__)
+            return reply(503,{'error':'Cloud database operation unavailable'})
     return application
 
 app=create_app()
