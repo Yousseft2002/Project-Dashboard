@@ -15,7 +15,7 @@ class Row(dict):
         return list(self.values())[key] if isinstance(key,int) else super().__getitem__(key)
 
 def row_factory(cursor):
-    names=[col.name for col in cursor.description]
+    names=[col.name for col in (cursor.description or ())]
     return lambda values: Row(zip(names,values))
 
 def sql(statement):
@@ -70,7 +70,8 @@ class Connection:
                 return Result(rows=[])
             raise
         if ignore: self.raw.execute('RELEASE SAVEPOINT compatible_update')
-        inserted=cursor.fetchone()[0] if returning else None
+        returned=cursor.fetchone() if returning else None
+        inserted=returned[0] if returned is not None else None
         return Result(cursor,lastrowid=inserted)
     def executescript(self,script):
         self.raw.execute('SELECT pg_advisory_xact_lock(714236001)')
@@ -96,7 +97,7 @@ class PostgresDB(DB):
 
 def database(path,require_postgres=False):
     import os
-    url=os.environ.get('DATABASE_URL','')
+    url=os.environ.get('DATABASE_URL','') or os.environ.get('POSTGRES_URL','')
     if url: return PostgresDB(url)
-    if require_postgres: raise ValueError('DATABASE_URL is required; Vercel cannot persist to SQLite')
+    if require_postgres: raise ValueError('DATABASE_URL or POSTGRES_URL is required; Vercel cannot persist to SQLite')
     return DB(path)

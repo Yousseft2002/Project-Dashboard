@@ -8,7 +8,7 @@ The FastAPI adapter calls shared device authentication/validation in `cloud_http
 
 Set these for Production (and Preview only if intentionally connecting that deployment to a separate test database):
 
-- `DATABASE_URL`: Neon's PostgreSQL URL, preferably pooled, including `sslmode=require` or stricter. Missing/invalid values fail closed. Vercel never falls back to SQLite.
+- `DATABASE_URL` or `POSTGRES_URL`: Neon's PostgreSQL URL, preferably pooled, including `sslmode=require` or stricter. `DATABASE_URL` takes precedence; `POSTGRES_URL` supports the Vercel Neon integration's default variable. Missing/invalid values fail closed. Vercel never falls back to SQLite.
 - `APP_PASSWORD`: dashboard owner password, at least 16 characters. Never a device token. Configure it privately in Vercel, not Git or chat.
 - `PUBLIC_HOSTNAME`: optional explicit stable production domain, without scheme/path. Vercel's supplied `VERCEL_PROJECT_PRODUCTION_URL` and `VERCEL_URL` are also allowed hosts. Do not configure wildcards. Custom domains require PUBLIC_HOSTNAME.
 
