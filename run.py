@@ -3,7 +3,7 @@
 Double-click "Project Tracker" on the desktop, or run:  python run.py
 If it is already running, this just opens the browser tab.
 """
-import socket
+import logging
 import os
 import sys
 import webbrowser
@@ -24,19 +24,14 @@ HOST = "0.0.0.0" if PRODUCTION else "127.0.0.1"
 URL = f"http://127.0.0.1:{PORT}/"
 
 
-def already_running() -> bool:
-    with socket.socket() as s:
-        s.settimeout(0.5)
-        return s.connect_ex(("127.0.0.1", PORT)) == 0
-
-
 if __name__ == "__main__":
-    if not PRODUCTION and already_running():
-        webbrowser.open(URL)
-        sys.exit(0)
-    from tracker.server import serve
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s %(message)s')
+    from tracker.github_dashboard import serve
     hostname = os.environ.get("PUBLIC_HOSTNAME") or os.environ.get("RENDER_EXTERNAL_HOSTNAME")
-    httpd = serve(PORT, host=HOST, production=PRODUCTION, expected_host=hostname)
+    try:
+        httpd = serve(PORT, host=HOST, production=PRODUCTION, expected_host=hostname)
+    except OSError:
+        sys.exit(f'Port {PORT} is unavailable. Stop the old tracker or configure PORT and APP_ORIGIN for a different port.')
     print(f"Project Tracker ({APP_ENV}) listening on {HOST}:{PORT}" + (f" · {hostname}" if hostname else ""))
     if not PRODUCTION and "--no-browser" not in sys.argv:
         webbrowser.open(URL)

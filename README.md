@@ -1,5 +1,13 @@
 # Project Tracker
 
+## Current: GitHub-only dashboard
+
+The default application now reads **only selected GitHub repositories**. It includes a responsive private dashboard, project details, commits and changed files, activity timeline, milestones/issues/PRs, optional AI briefings, and manual-work-based commit reminders. Local scanners and collectors are not imported or exposed by the new entry points.
+
+Start with [GitHub setup](GITHUB_SETUP.md) and [the security review](GITHUB_SECURITY_REVIEW.md). `python run.py --no-browser` runs the new application with no third-party dependencies. GitHub credentials must be configured in the server environment. Production requires HTTPS and private durable storage. No hosting changes have been deployed.
+
+**The sections below document the retained legacy application. Their scanner, collector, password, PostgreSQL, and deployment instructions do not apply to the new default application.**
+
 ## Central collector upgrade
 
 The incremental collector pipeline, device heartbeats, repository matching, local AI session metadata, owner diagnostics and human instructions are implemented. Start with [the audit](AUDIT.md) and [collector/deployment setup](COLLECTOR_SETUP.md). GitHub/Render API connectors and PostgreSQL are subsequent phases. The public Render site is not automatically changed by these local edits.

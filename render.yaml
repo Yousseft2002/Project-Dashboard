@@ -11,5 +11,17 @@ services:
     envVars:
       - key: APP_ENV
         value: production
-      - key: APP_PASSWORD
+      - key: APP_ORIGIN
+        sync: false
+      - key: TRACKER_DATA_DIR
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_OWNER_ID
+        sync: false
+      - key: GITHUB_REPOSITORIES
+        sync: false
+      - key: GITHUB_READ_TOKEN
         sync: false
